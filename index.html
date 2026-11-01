@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1f2126">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Invest Calc">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<title>Web App - Invest Calc</title>
+<style>
+  :root {
+    --bg: #1f2126;
+    --card: #272a31;
+    --line: #353841;
+    --text: #e8eaed;
+    --muted: #a6aab3;
+    --faint: #6f747d;
+    --blue: #4a72f0;
+    --track: #3a3d45;
+    --grey: #6b6e75;
+    --gold: #f4c247;
+    --green: #4caf61;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Ubuntu, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 8px; margin: 4px 4px 14px; }
+  header h1 { font-size: 17px; font-weight: 600; margin: 0; }
+  header .ver { font-size: 13px; color: var(--faint); }
+  .card { background: var(--card); border-radius: 26px; overflow: hidden; }
+  .result { padding: 22px 24px 20px; }
+  .result .k { color: var(--muted); font-size: 15px; font-weight: 500; }
+  .result .big { font-size: 34px; font-weight: 600; margin: 6px 0 8px; letter-spacing: -0.5px; font-variant-numeric: tabular-nums; }
+  .result .sub { color: var(--muted); font-size: 15px; line-height: 1.4; }
+  .result .split { color: var(--faint); font-size: 13px; margin-top: 8px; font-variant-numeric: tabular-nums; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+  .chartbox { padding: 18px 18px 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 14px; color: var(--muted); margin: 0 4px 10px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+  .dash { width: 16px; border-top: 2px dashed var(--gold); display: inline-block; }
+  #chart { width: 100%; height: auto; display: block; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
+  #chart text { font-size: 15px; fill: var(--faint); font-variant-numeric: tabular-nums; }
+  .controls { padding: 10px 24px 22px; }
+  .row { padding: 14px 0 6px; }
+  .row label { display: block; font-size: 16px; font-weight: 500; margin-bottom: 10px; }
+  .line { display: flex; align-items: center; gap: 14px; }
+  .line input[type=range] { flex: 1; }
+  .val {
+    width: 120px; text-align: right; font-size: 18px; font-weight: 600; color: var(--text);
+    background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 4px 6px;
+    font-family: inherit; font-variant-numeric: tabular-nums;
+  }
+  .val:focus { outline: none; border-color: var(--blue); background: #1f2229; }
+  input[type=range] { -webkit-appearance: none; appearance: none; height: 28px; background: transparent; margin: 0; }
+  input[type=range]::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 3px;
+    background: linear-gradient(var(--blue), var(--blue)) 0 / var(--p, 50%) 100% no-repeat, var(--track);
+  }
+  input[type=range]::-moz-range-track { height: 6px; border-radius: 3px; background: var(--track); }
+  input[type=range]::-moz-range-progress { height: 6px; border-radius: 3px; background: var(--blue); }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: var(--blue);
+    margin-top: -9px; border: 0;
+  }
+  input[type=range]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--blue); border: 0; }
+  input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(74,114,240,.35); }
+  .foot { display: flex; justify-content: space-between; align-items: center; margin: 14px 6px 0; font-size: 13px; color: var(--faint); }
+  .foot button { background: none; border: 0; color: var(--muted); font: inherit; padding: 6px 4px; cursor: pointer; }
+  .foot button:focus-visible { outline: 2px solid var(--blue); border-radius: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><h1>Invest Calc</h1><span class="ver" id="ver"></span></header>
+
+  <div class="card">
+    <div class="result">
+      <div class="k">Time to reach target goal</div>
+      <div class="big" id="years">–</div>
+      <div class="sub" id="subtitle"></div>
+      <div class="split" id="split"></div>
+    </div>
+    <hr>
+    <div class="chartbox">
+      <div class="legend">
+        <span><i class="dot" style="background:var(--blue)"></i>Total balance</span>
+        <span><i class="dot" style="background:var(--grey)"></i>Invested capital</span>
+        <span><i class="dash"></i>Target line</span>
+      </div>
+      <svg id="chart" viewBox="0 0 600 300" aria-label="Growth chart"></svg>
+    </div>
+    <hr>
+    <div class="controls" id="controls"></div>
+  </div>
+
+  <div class="foot">
+    <span>Monthly compounding, deposits at month end</span>
+    <button id="reset" type="button">Reset</button>
+  </div>
+</div>
+
+<script>
+const VERSION = "1.0";
+document.getElementById("ver").textContent = "v" + VERSION;
+
+const FIELDS = [
+  { id: "target",    label: "Target future value",   min: 10000, max: 2000000, step: 10000, def: 1000000, money: true },
+  { id: "principal", label: "Starting principal",    min: 0,     max: 500000,  step: 1000,  def: 141000,  money: true },
+  { id: "monthly",   label: "Monthly contribution",  min: 0,     max: 30000,   step: 100,   def: 20000,   money: true },
+  { id: "rate",      label: "Annual return rate",    min: 0,     max: 20,      step: 0.1,   def: 13.7,    money: false },
+];
+const STORE = "investcalc.v1";
+let state = {};
+try { state = JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { state = {}; }
+FIELDS.forEach(f => { if (typeof state[f.id] !== "number" || isNaN(state[f.id])) state[f.id] = f.def; });
+
+const usd = n => "$" + Math.round(n).toLocaleString("en-US");
+const fmt = (f, v) => f.money ? usd(v) : (+v).toFixed(1) + "%";
+const kfmt = n => n >= 1e7 ? "$" + (n / 1e6).toFixed(1) + "M" : "$" + Math.round(n / 1000) + "k";
+
+// Build controls
+const box = document.getElementById("controls");
+FIELDS.forEach(f => {
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML = `<label for="r-${f.id}">${f.label}</label>
+    <div class="line">
+      <input type="range" id="r-${f.id}" min="${f.min}" max="${Math.max(f.max, state[f.id])}" step="${f.step}">
+      <input class="val" id="v-${f.id}" inputmode="decimal" enterkeyhint="done" aria-label="${f.label} value">
+    </div>`;
+  box.appendChild(row);
+  const r = row.querySelector("input[type=range]");
+  const v = row.querySelector(".val");
+  r.value = state[f.id];
+  r.addEventListener("input", () => { state[f.id] = +r.value; update(); });
+  v.addEventListener("focus", () => { v.value = state[f.id]; v.select(); });
+  const commit = () => {
+    const n = parseFloat(String(v.value).replace(/[^0-9.]/g, ""));
+    if (!isNaN(n) && n >= 0) {
+      state[f.id] = f.money ? Math.round(n) : Math.min(n, 100);
+      if (state[f.id] > +r.max) r.max = state[f.id];
+      r.value = state[f.id];
+    }
+    update();
+  };
+  v.addEventListener("blur", commit);
+  v.addEventListener("keydown", e => { if (e.key === "Enter") v.blur(); });
+});
+
+document.getElementById("reset").addEventListener("click", () => {
+  FIELDS.forEach(f => {
+    state[f.id] = f.def;
+    const r = document.getElementById("r-" + f.id);
+    r.max = f.max; r.value = f.def;
+  });
+  update();
+});
+
+// Simulation: monthly compounding, contribution at end of each month
+function simulate(months) {
+  const i = state.rate / 100 / 12;
+  let bal = state.principal, cap = state.principal;
+  const pts = [{ m: 0, bal, cap }];
+  for (let m = 1; m <= months; m++) {
+    bal = bal * (1 + i) + state.monthly;
+    cap += state.monthly;
+    pts.push({ m, bal, cap });
+  }
+  return pts;
+}
+function monthsToTarget() {
+  if (state.principal >= state.target) return 0;
+  const i = state.rate / 100 / 12;
+  let bal = state.principal;
+  for (let m = 1; m <= 1200; m++) {
+    bal = bal * (1 + i) + state.monthly;
+    if (bal >= state.target) return m;
+  }
+  return null; // not reached within 100 years
+}
+
+const svg = document.getElementById("chart");
+const W = 600, H = 300, L = 72, R = 18, T = 14, B = 34;
+let lastPts = [], lastMax = 1, lastSpan = 1;
+
+function draw(hit) {
+  const span = hit === null ? 360 : Math.max(12, Math.round((hit || 1) * 1.7));
+  const pts = simulate(span);
+  const maxY = Math.max(state.target, pts[pts.length - 1].bal) || 1;
+  lastPts = pts; lastMax = maxY; lastSpan = span;
+  const x = m => L + (m / span) * (W - L - R);
+  const y = v => T + (1 - v / maxY) * (H - T - B);
+
+  let s = "";
+  for (let k = 0; k <= 4; k++) {
+    const v = maxY * k / 4, yy = y(v);
+    s += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#30333b" stroke-width="1"/>`;
+    s += `<text x="${L - 8}" y="${yy + 4}" text-anchor="end">${k === 0 ? "$0" : kfmt(v)}</text>`;
+  }
+  for (let k = 0; k <= 5; k++) {
+    const m = span * k / 5;
+    s += `<text x="${x(m)}" y="${H - 10}" text-anchor="middle">${(m / 12).toFixed(1)} yrs</text>`;
+  }
+  const path = key => pts.map((p, n) => (n ? "L" : "M") + x(p.m).toFixed(1) + "," + y(p[key]).toFixed(1)).join("");
+  s += `<line x1="${L}" x2="${W - R}" y1="${y(state.target)}" y2="${y(state.target)}" stroke="var(--gold)" stroke-width="2" stroke-dasharray="7 6"/>`;
+  s += `<path d="${path("cap")}" fill="none" stroke="var(--grey)" stroke-width="2.5"/>`;
+  s += `<path d="${path("bal")}" fill="none" stroke="var(--blue)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (hit !== null) s += `<circle cx="${x(hit)}" cy="${y(state.target)}" r="7" fill="var(--green)"/>`;
+  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--blue)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="40" fill="#1b1d22" stroke="#3a3d45"/><text id="ht1" style="fill:#e8eaed;font-size:13px"></text><text id="ht2" style="font-size:12px"></text></g>`;
+  svg.innerHTML = s;
+}
+
+// Touch / mouse readout on chart
+function showAt(clientX) {
+  const rect = svg.getBoundingClientRect();
+  const sx = (clientX - rect.left) / rect.width * W;
+  const m = Math.round(Math.min(Math.max((sx - L) / (W - L - R), 0), 1) * lastSpan);
+  const p = lastPts[m]; if (!p) return;
+  const x = L + (m / lastSpan) * (W - L - R);
+  const y = T + (1 - p.bal / lastMax) * (H - T - B);
+  const g = svg.querySelector("#hover"); g.style.display = "";
+  svg.querySelector("#hl").setAttribute("x1", x); svg.querySelector("#hl").setAttribute("x2", x);
+  const c = svg.querySelector("#hc"); c.setAttribute("cx", x); c.setAttribute("cy", y);
+  const bw = 150, bx = x + bw + 12 > W ? x - bw - 10 : x + 10;
+  const rr = svg.querySelector("#hr"); rr.setAttribute("x", bx); rr.setAttribute("y", T); rr.setAttribute("width", bw);
+  const t1 = svg.querySelector("#ht1"); t1.setAttribute("x", bx + 10); t1.setAttribute("y", T + 17); t1.textContent = usd(p.bal);
+  const t2 = svg.querySelector("#ht2"); t2.setAttribute("x", bx + 10); t2.setAttribute("y", T + 33); t2.textContent = (m / 12).toFixed(1) + " yrs, " + usd(p.cap) + " in";
+}
+const hide = () => { const g = svg.querySelector("#hover"); if (g) g.style.display = "none"; };
+svg.addEventListener("pointermove", e => showAt(e.clientX));
+svg.addEventListener("pointerdown", e => showAt(e.clientX));
+svg.addEventListener("pointerleave", hide);
+svg.addEventListener("pointerup", e => { if (e.pointerType !== "mouse") setTimeout(hide, 1500); });
+
+function update() {
+  FIELDS.forEach(f => {
+    const r = document.getElementById("r-" + f.id);
+    const v = document.getElementById("v-" + f.id);
+    r.style.setProperty("--p", ((state[f.id] - r.min) / (r.max - r.min) * 100) + "%");
+    if (document.activeElement !== v) v.value = fmt(f, state[f.id]);
+  });
+  const hit = monthsToTarget();
+  const yearsEl = document.getElementById("years");
+  const sub = document.getElementById("subtitle");
+  const split = document.getElementById("split");
+  if (hit === null) {
+    yearsEl.textContent = "100+ years";
+    sub.textContent = "This mix won't reach " + usd(state.target) + ". Raise the monthly contribution or return rate.";
+    split.textContent = "";
+  } else if (hit === 0) {
+    yearsEl.textContent = "Already there";
+    sub.textContent = "Your starting principal already meets " + usd(state.target) + ".";
+    split.textContent = "";
+  } else {
+    yearsEl.textContent = (hit / 12).toFixed(1) + " years";
+    sub.textContent = "Projected timeline to grow savings to " + usd(state.target) + ".";
+    const p = simulate(hit)[hit];
+    split.textContent = "You put in " + usd(p.cap) + ", growth adds " + usd(p.bal - p.cap) + " (" + hit + " months)";
+  }
+  draw(hit);
+  try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
+}
+update();
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+}
+</script>
+</body>
+</html>
