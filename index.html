@@ -180,7 +180,7 @@
 </div>
 
 <script>
-const VERSION = "4.0";
+const VERSION = "5.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -448,7 +448,8 @@ function changeTag(list, n) {
   return d > 0 ? `<span class="chg up">▲ ${v}</span>` : `<span class="chg down">▼ ${v}</span>`;
 }
 function renderCopom() {
-  const desc = [...copom.list].sort((a, b) => b.date.localeCompare(a.date));
+  // The SELIC target regime started in March 1999. Older Banco Central records use a different (monthly) rate, so skip them.
+  const desc = copom.list.filter(c => c.date >= "1999-03-01").sort((a, b) => b.date.localeCompare(a.date));
   document.getElementById("copomRecent").innerHTML = `<div>${t().copomTitle}</div>` + desc.slice(0, 3).map((c, n) =>
     `<div class="r"><span class="d">${fdate(c.date)}</span><span>${frate(c.rate)}${n === 0 ? " (" + t().current + ")" : ""}</span>${changeTag(desc, n)}</div>`).join("");
 
@@ -481,22 +482,30 @@ function renderCopom() {
   const cw = 600, ch = 170, l = 70, r = 12, tp = 12, bt = 30;
   const t0 = Date.parse(asc[0].date), t1 = Date.parse(today) || Date.parse(asc[asc.length - 1].date);
   const rates = asc.map(c => c.rate);
-  let lo = Math.floor(Math.min(...rates)) , hi = Math.ceil(Math.max(...rates));
-  if (hi - lo < 1) { lo -= 0.5; hi += 0.5; }
+  // Round axis to tidy steps (0.5, 1, 2.5, 5, 10...) with at most 4 gridlines
+  const rawMin = Math.min(...rates), rawMax = Math.max(...rates);
+  const ystep = [0.25, 0.5, 1, 2.5, 5, 10, 15].find(st => Math.ceil(rawMax / st) - Math.floor(rawMin / st) <= 3) || 15;
+  let lo = Math.floor(rawMin / ystep) * ystep, hi = Math.ceil(rawMax / ystep) * ystep;
+  if (hi === lo) hi = lo + ystep;
   const X = d => l + (Date.parse(d) - t0) / Math.max(1, t1 - t0) * (cw - l - r);
   const Y = v => tp + (1 - (v - lo) / (hi - lo)) * (ch - tp - bt);
   let g = "";
-  [lo, (lo + hi) / 2, hi].forEach(v => {
+  const yticks = []; for (let v = lo; v <= hi + 1e-9; v += ystep) yticks.push(v);
+  yticks.forEach(v => {
     g += `<line x1="${l}" x2="${cw - r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#30333b"/>`;
     g += `<text x="${l - 8}" y="${Y(v) + 6}" text-anchor="end">${frate(v)}</text>`;
   });
   let d = "";
   asc.forEach((c, n) => { d += (n ? `H${X(c.date).toFixed(1)}V` : `M${X(c.date).toFixed(1)},`) + Y(c.rate).toFixed(1); });
   d += `H${cw - r}`;
-  g += `<path d="${d}" fill="none" stroke="var(--teal)" stroke-width="3"/>`;
-  asc.forEach(c => g += `<circle cx="${X(c.date)}" cy="${Y(c.rate)}" r="3.5" fill="var(--teal)"/>`);
+  g += `<path d="${d}" fill="none" stroke="var(--teal)" stroke-width="${asc.length > 30 ? 2.5 : 3}" stroke-linejoin="round"/>`;
+  // Dots only when there are few enough meetings to tell apart
+  if (asc.length <= 30) asc.forEach(c => g += `<circle cx="${X(c.date)}" cy="${Y(c.rate)}" r="3.5" fill="var(--teal)"/>`);
+  // Label every 1, 2, 5 or 10 years so labels never overlap (max about 6)
   const y0 = new Date(asc[0].date).getUTCFullYear(), y1 = new Date(today).getUTCFullYear();
+  const xstep = [1, 2, 5, 10].find(st => (y1 - y0) / st <= 6) || 10;
   for (let y = y0 + 1; y <= y1; y++) {
+    if (y % xstep) continue;
     const xx = X(y + "-01-01");
     g += `<line x1="${xx}" x2="${xx}" y1="${tp}" y2="${ch - bt}" stroke="#30333b" stroke-dasharray="3 4"/><text x="${xx}" y="${ch - 6}" text-anchor="middle">${y}</text>`;
   }
