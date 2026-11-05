@@ -26,6 +26,9 @@
     --gold: #f4c247;
     --green: #4caf61;
     --teal: #2fbfae;
+    --orange: #f0954b;
+    --pink: #e86fa5;
+    --sky: #5aaef0;
     --purple: #a374f5;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -52,6 +55,21 @@
   .result .split { color: var(--faint); font-size: 13px; margin-top: 8px; font-variant-numeric: tabular-nums; }
   hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
   .chartbox { padding: 18px 18px 14px; }
+  .lines { margin: 0 2px 12px; }
+  .ln-head { display: flex; justify-content: space-between; font-size: 12px; color: var(--faint); padding: 0 0 4px 30px; }
+  .ln { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-top: 1px solid var(--line); cursor: pointer; }
+  .ln:first-child { border-top: 0; }
+  .ln input[type=checkbox] { -webkit-appearance: none; appearance: none; flex: none; width: 20px; height: 20px; margin: 0; border-radius: 6px; border: 2px solid var(--c); background: transparent; cursor: pointer; display: grid; place-content: center; }
+  .ln input[type=checkbox]:checked { background: var(--c); }
+  .ln input[type=checkbox]:checked::after { content: ""; width: 5px; height: 10px; border: solid #1f2126; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px, -1px); }
+  .ln input[type=checkbox]:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .ln .nm { flex: 1; min-width: 0; font-size: 14px; color: var(--text); line-height: 1.3; }
+  .ln .nm small { display: block; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .ln .tm { font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ln.off .nm, .ln.off .tm { opacity: .45; }
+  .ln .rate-in { width: 64px; background: #1f2229; border: 1px solid var(--line); border-radius: 6px; color: var(--text); font: inherit; font-size: 12px; padding: 2px 6px; text-align: right; font-variant-numeric: tabular-nums; }
+  .ln .rate-in:focus { outline: none; border-color: var(--blue); }
+  .ln .swatch-dash { width: 20px; flex: none; border-top: 2px dashed var(--gold); }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 14px; color: var(--muted); margin: 0 4px 10px; }
   .legend span { display: inline-flex; align-items: center; gap: 7px; }
   .dot { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
@@ -149,16 +167,10 @@
       <div class="big" id="years">–</div>
       <div class="sub" id="subtitle"></div>
       <div class="split" id="split"></div>
-      <div class="split" id="selicLine" style="color:var(--teal)"></div>
     </div>
     <hr>
     <div class="chartbox">
-      <div class="legend">
-        <span><i class="dot" style="background:var(--purple)"></i><span id="totalLbl"></span></span>
-        <span><i class="dot" style="background:var(--grey)"></i><span data-t="invested"></span></span>
-        <span><i class="dot" style="background:var(--teal)"></i><span data-t="selicBal"></span></span>
-        <span><i class="dash"></i><span data-t="targetLine"></span></span>
-      </div>
+      <div class="lines" id="lines"></div>
       <svg id="chart" viewBox="0 0 600 300" aria-label="Growth chart"></svg>
     </div>
     <hr>
@@ -211,7 +223,7 @@
 </div>
 
 <script>
-const VERSION = "8.0";
+const VERSION = "9.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -229,6 +241,9 @@ let cdiBase = CDI_BUILTIN;
 // IPCA (official inflation), 12-month total. Built-in value; "Update rates" refreshes it (SGS 13522)
 const IPCA_BUILTIN = { rate: 4.58, date: "2026-09-01" };
 let ipcaBase = IPCA_BUILTIN;
+// TR (Taxa Referencial), monthly %. Used for Poupança. "Update rates" refreshes it (SGS 226)
+let trBase = { rate: 0, date: null };
+try { const c = JSON.parse(localStorage.getItem("investcalc.tr")); if (c && typeof c.rate === "number") trBase = c; } catch (e) {}
 try { const c = JSON.parse(localStorage.getItem("investcalc.ipca")); if (c && typeof c.rate === "number") ipcaBase = c; } catch (e) {}
 try { const c = JSON.parse(localStorage.getItem("investcalc.cdi")); if (c && typeof c.rate === "number") cdiBase = c; } catch (e) {}
 // "% of CDI" is applied to the daily CDI rate, then compounded over 252 business days (how Brazilian banks calculate it)
@@ -247,6 +262,9 @@ const FLAG_US = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" he
 const I18N = {
   en: {
     locale: "en-US", timeTo: "Time to reach target goal", years: "years", months: "months",
+    lnHead: "Lines on the chart", lnTime: "Time to goal", perYear: "a year", afterTax: "after tax", noTax: "no tax", exempt: "tax-free",
+    lnSelic: "SELIC (Tesouro Selic)", lnPoup: "Poupança (savings)", lnPre: "Prefixado (fixed rate)", lnIpca: "IPCA+ (inflation + rate)",
+    short: { selic: "SELIC", poup: "Poupança", pre: "Prefixado", ipca: "IPCA+" },
     total: { none: n => `My investment (${n}% of CDI)`, cdb: n => `My CDB/RDB (${n}% of CDI)`, lci: n => `My LCI/LCA (${n}% of CDI)` }, invested: "Invested capital", targetLine: "Target line",
     target: "Target future value", principal: "Starting principal", monthly: "Monthly contribution", taxTitle: "Investment type", taxOpts: [["none", "No tax", "gross"], ["cdb", "CDB / RDB", "taxed"], ["lci", "LCI / LCA", "tax-free"]],
     glossTitle: "Glossary",
@@ -261,6 +279,11 @@ const I18N = {
       ["IR", "Imposto de Renda", "Income tax on gains: 22.5% up to 6 months, down to 15% after 2 years."],
       ["FGC", "Fundo Garantidor de Créditos", "Protects up to R$250,000 per person per bank if the bank fails. Covers CDB, RDB, LCI and LCA."],
       ["IPCA", "Índice Nacional de Preços ao Consumidor Amplo", "Brazil's official inflation rate, measured by IBGE."],
+      ["IPCA+", "IPCA + taxa", "Pays inflation plus a fixed real rate (e.g. IPCA + 7%). Protects your buying power. Tesouro IPCA+ is the best-known one."],
+      ["Prefixado", "Taxa prefixada (fixed rate)", "You know the exact rate on day one (e.g. 13% a year) and it never changes. Good if rates fall, bad if they rise."],
+      ["Pós-fixado", "Taxa pós-fixada (floating rate)", "The rate follows an index and changes over time, like 100% of CDI or SELIC. Your CDB, RDB, LCI and LCA are pós-fixados."],
+      ["Poupança", "Caderneta de poupança (savings account)", "Pays 0.5% a month + TR while SELIC is above 8.5% (otherwise 70% of SELIC + TR). Tax-free and covered by the FGC."],
+      ["TR", "Taxa Referencial", "A small reference rate set by the Central Bank, added to Poupança's return."],
       ["a.a.", "ao ano", "Per year. 13.75% a.a. means 13.75% a year."],
     ],
     taxHint: { none: "Showing gross returns, before income tax.", cdb: "Your CDB/RDB and SELIC pay IR on the gains: 22.5% up to 6 months, 20% up to 1 year, 17.5% up to 2 years, 15% after that. Each monthly deposit counts its own time.", lci: "Your CDI investment is tax-free. SELIC (Tesouro Selic) still pays IR on the gains: 22.5% down to 15% after 2 years." },
@@ -285,6 +308,9 @@ const I18N = {
   },
   pt: {
     locale: "pt-BR", timeTo: "Tempo para atingir a meta", years: "anos", months: "meses",
+    lnHead: "Linhas no gráfico", lnTime: "Tempo até a meta", perYear: "a.a.", afterTax: "após IR", noTax: "sem IR", exempt: "isenta de IR",
+    lnSelic: "SELIC (Tesouro Selic)", lnPoup: "Poupança", lnPre: "Prefixado", lnIpca: "IPCA+ (inflação + taxa)",
+    short: { selic: "SELIC", poup: "Poupança", pre: "Prefixado", ipca: "IPCA+" },
     total: { none: n => `Meu investimento (${n}% do CDI)`, cdb: n => `Meu CDB/RDB (${n}% do CDI)`, lci: n => `Minha LCI/LCA (${n}% do CDI)` }, invested: "Capital investido", targetLine: "Linha da meta",
     target: "Valor futuro desejado", principal: "Capital inicial", monthly: "Aporte mensal", taxTitle: "Tipo de investimento", taxOpts: [["none", "Sem IR", "bruto"], ["cdb", "CDB / RDB", "tributado"], ["lci", "LCI / LCA", "isento"]],
     glossTitle: "Glossário",
@@ -299,6 +325,11 @@ const I18N = {
       ["IR", "Imposto de Renda", "Imposto sobre o rendimento: 22,5% até 6 meses, caindo para 15% após 2 anos."],
       ["FGC", "Fundo Garantidor de Créditos", "Protege até R$ 250 mil por CPF por banco se o banco quebrar. Cobre CDB, RDB, LCI e LCA."],
       ["IPCA", "Índice Nacional de Preços ao Consumidor Amplo", "Inflação oficial do Brasil, medida pelo IBGE."],
+      ["IPCA+", "IPCA + taxa", "Paga a inflação mais uma taxa real fixa (ex.: IPCA + 7%). Protege seu poder de compra. O Tesouro IPCA+ é o mais conhecido."],
+      ["Prefixado", "Taxa prefixada", "Você sabe a taxa exata no dia da aplicação (ex.: 13% a.a.) e ela nunca muda. Bom se os juros caírem, ruim se subirem."],
+      ["Pós-fixado", "Taxa pós-fixada", "A taxa acompanha um índice e muda com o tempo, como 100% do CDI ou a SELIC. Seus CDB, RDB, LCI e LCA são pós-fixados."],
+      ["Poupança", "Caderneta de poupança", "Rende 0,5% ao mês + TR enquanto a SELIC está acima de 8,5% (senão, 70% da SELIC + TR). Isenta de IR e coberta pelo FGC."],
+      ["TR", "Taxa Referencial", "Taxa de referência pequena definida pelo Banco Central, somada ao rendimento da Poupança."],
       ["a.a.", "ao ano", "Por ano. 13,75% a.a. significa 13,75% ao ano."],
     ],
     taxHint: { none: "Mostrando rendimento bruto, antes do Imposto de Renda.", cdb: "Seu CDB/RDB e a SELIC pagam IR sobre o rendimento: 22,5% até 6 meses, 20% até 1 ano, 17,5% até 2 anos e 15% depois disso. Cada aporte mensal conta o próprio prazo.", lci: "Seu investimento CDI é isento. A SELIC (Tesouro Selic) continua pagando IR sobre o rendimento: de 22,5% até 15% após 2 anos." },
@@ -338,6 +369,10 @@ let state = {};
 try { state = JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { state = {}; }
 FIELDS.forEach(f => { if (typeof state[f.id] !== "number" || isNaN(state[f.id])) state[f.id] = f.def; });
 if (!["none", "cdb", "lci"].includes(state.tax)) state.tax = "none";
+const SHOW_DEF = { mine: true, selic: true, poup: false, pre: false, ipca: false, cap: true, target: true };
+state.show = Object.assign({}, SHOW_DEF, typeof state.show === "object" && state.show ? state.show : {});
+if (typeof state.preRate !== "number" || isNaN(state.preRate)) state.preRate = 13;
+if (typeof state.ipcaSpread !== "number" || isNaN(state.ipcaSpread)) state.ipcaSpread = 7;
 if (typeof state.real !== "number" || isNaN(state.real) || state.real < 0 || state.real > 5) state.real = 1;
 
 const usd = n => "$" + Math.round(n).toLocaleString(t().locale);
@@ -389,7 +424,7 @@ document.getElementById("reset").addEventListener("click", () => {
     const r = document.getElementById("r-" + f.id);
     r.max = f.max; r.value = f.def;
   });
-  state.tax = "none"; state.real = 1;
+  state.tax = "none"; state.real = 1; state.show = Object.assign({}, SHOW_DEF); state.preRate = 13; state.ipcaSpread = 7;
   update();
 });
 
@@ -412,9 +447,27 @@ function series(rate, months, taxed) {
 }
 const cdiTaxed = () => state.tax === "cdb";
 const selicTaxed = () => state.tax !== "none";
+// Annual rates for the comparison lines
+function poupRate() {
+  // Rule since 2012: SELIC above 8.5% -> 0.5% a month + TR; otherwise 70% of SELIC + TR
+  const base = state.selic > 8.5 ? Math.pow(1.005, 12) - 1 : 0.7 * state.selic / 100;
+  return ((1 + base) * Math.pow(1 + trBase.rate / 100, 12) - 1) * 100;
+}
+const ipcaPlusRate = () => ((1 + ipcaBase.rate / 100) * (1 + state.ipcaSpread / 100) - 1) * 100;
+const COMPARE = [
+  { id: "selic", key: "sel", color: "var(--teal)", rate: () => state.selic, taxed: () => selicTaxed() },
+  { id: "poup", key: "poup", color: "var(--orange)", rate: poupRate, taxed: () => false },
+  { id: "pre", key: "pre", color: "var(--pink)", rate: () => state.preRate, taxed: () => selicTaxed() },
+  { id: "ipca", key: "ipca", color: "var(--sky)", rate: ipcaPlusRate, taxed: () => selicTaxed() },
+];
 function simulate(months) {
-  const a = series(effRate(), months, cdiTaxed()), b = series(state.selic, months, selicTaxed());
-  return a.map((x, m) => ({ m, bal: x.net, gross: x.gross, tax: x.tax, sel: b[m].net, cap: state.principal + state.monthly * m }));
+  const a = series(effRate(), months, cdiTaxed());
+  const others = COMPARE.map(c => [c.key, series(c.rate(), months, c.taxed())]);
+  return a.map((x, m) => {
+    const o = { m, bal: x.net, gross: x.gross, tax: x.tax, cap: state.principal + state.monthly * m };
+    others.forEach(([k, arr]) => { o[k] = arr[m].net; });
+    return o;
+  });
 }
 function monthsToTarget(rate = effRate(), taxed = cdiTaxed()) {
   if (state.principal >= state.target) return 0;
@@ -427,12 +480,14 @@ const svg = document.getElementById("chart");
 const W = 600, H = 300, L = 72, R = 18, T = 14, B = 34;
 let lastPts = [], lastMax = 1, lastSpan = 1;
 
-function draw(hit, hitS) {
-  const hits = [hit, hitS].filter(h => h !== null);
+function draw(hit, hits2) {
+  const sh = state.show;
+  const vis = COMPARE.filter(c => sh[c.id]);
+  const hits = [hit, ...vis.map(c => hits2[c.id])].filter(h => h !== null && h !== undefined);
   const span = hits.length ? Math.max(12, Math.round((Math.max(...hits) || 1) * 1.7)) : 360;
   const pts = simulate(span);
   const last = pts[pts.length - 1];
-  const maxY = Math.max(state.target, last.bal, last.sel) || 1;
+  const maxY = Math.max(sh.target ? state.target : 0, sh.mine ? last.bal : 0, sh.cap ? last.cap : 0, ...vis.map(c => last[c.key])) || 1;
   lastPts = pts; lastMax = maxY; lastSpan = span;
   const x = m => L + (m / span) * (W - L - R);
   const y = v => T + (1 - v / maxY) * (H - T - B);
@@ -448,13 +503,13 @@ function draw(hit, hitS) {
     s += `<text x="${k === 5 ? W - R : x(m)}" y="${H - 10}" text-anchor="${k === 5 ? "end" : "middle"}">${dec(m / 12)} ${t().axis}</text>`;
   }
   const path = key => pts.map((p, n) => (n ? "L" : "M") + x(p.m).toFixed(1) + "," + y(p[key]).toFixed(1)).join("");
-  s += `<line x1="${L}" x2="${W - R}" y1="${y(state.target)}" y2="${y(state.target)}" stroke="var(--gold)" stroke-width="2" stroke-dasharray="7 6"/>`;
-  s += `<path d="${path("cap")}" fill="none" stroke="var(--grey)" stroke-width="2.5"/>`;
-  s += `<path d="${path("sel")}" fill="none" stroke="var(--teal)" stroke-width="2.5" stroke-linecap="round"/>`;
-  s += `<path d="${path("bal")}" fill="none" stroke="var(--purple)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
-  if (hitS !== null) s += `<circle cx="${x(hitS)}" cy="${y(state.target)}" r="5" fill="var(--teal)"/>`;
-  if (hit !== null) s += `<circle cx="${x(hit)}" cy="${y(state.target)}" r="7" fill="var(--green)"/>`;
-  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--purple)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="56" fill="#1b1d22" stroke="#3a3d45"/><text id="ht1" style="fill:var(--purple);font-size:13px;font-weight:600"></text><text id="ht2" style="fill:#8b8f97;font-size:12px"></text><text id="ht3" style="font-size:12px;fill:var(--teal)"></text></g>`;
+  if (sh.target) s += `<line x1="${L}" x2="${W - R}" y1="${y(state.target)}" y2="${y(state.target)}" stroke="var(--gold)" stroke-width="2" stroke-dasharray="7 6"/>`;
+  if (sh.cap) s += `<path d="${path("cap")}" fill="none" stroke="var(--grey)" stroke-width="2.5"/>`;
+  vis.forEach(c => { s += `<path d="${path(c.key)}" fill="none" stroke="${c.color}" stroke-width="2.5" stroke-linecap="round"/>`; });
+  if (sh.mine) s += `<path d="${path("bal")}" fill="none" stroke="var(--purple)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (sh.target) vis.forEach(c => { const h = hits2[c.id]; if (h !== null && h <= span) s += `<circle cx="${x(h)}" cy="${y(state.target)}" r="5" fill="${c.color}"/>`; });
+  if (hit !== null && sh.mine && sh.target) s += `<circle cx="${x(hit)}" cy="${y(state.target)}" r="7" fill="var(--green)"/>`;
+  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--purple)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="56" fill="#1b1d22" stroke="#3a3d45"/><g id="htx"></g></g>`;
   svg.innerHTML = s;
 }
 
@@ -464,23 +519,27 @@ function showAt(clientX) {
   const sx = (clientX - rect.left) / rect.width * W;
   const m = Math.round(Math.min(Math.max((sx - L) / (W - L - R), 0), 1) * lastSpan);
   const p = lastPts[m]; if (!p) return;
+  const sh = state.show;
   const x = L + (m / lastSpan) * (W - L - R);
-  const y = T + (1 - p.bal / lastMax) * (H - T - B);
+  const firstVis = sh.mine ? ["bal", "var(--purple)"] : (COMPARE.filter(c => sh[c.id]).map(c => [c.key, c.color])[0] || ["cap", "var(--grey)"]);
+  const y = T + (1 - p[firstVis[0]] / lastMax) * (H - T - B);
   const g = svg.querySelector("#hover"); g.style.display = "";
   svg.querySelector("#hl").setAttribute("x1", x); svg.querySelector("#hl").setAttribute("x2", x);
-  const c = svg.querySelector("#hc"); c.setAttribute("cx", x); c.setAttribute("cy", y);
-  // Fill the text first, then size and place the box around it
-  const t1 = svg.querySelector("#ht1"), t2 = svg.querySelector("#ht2"), t3 = svg.querySelector("#ht3");
-  t1.textContent = usd(p.bal);
-  t2.textContent = t().tip(m ? fdur(m) : "0", usd(p.cap));
-  t3.textContent = t().tipSelic(usd(p.sel));
-  const bw = Math.ceil(Math.max(t1.getComputedTextLength(), t2.getComputedTextLength(), t3.getComputedTextLength())) + 20;
+  const c = svg.querySelector("#hc"); c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("fill", firstVis[1]);
+  // One line per visible series, in that line's color
+  const rows = [];
+  if (sh.mine) rows.push([usd(p.bal), "var(--purple)", 600]);
+  rows.push([t().tip(m ? fdur(m) : "0", usd(p.cap)), "#8b8f97", 400]);
+  COMPARE.filter(cc => sh[cc.id]).forEach(cc => rows.push([`${t().short[cc.id]} ${usd(p[cc.key])}`, cc.color, 400]));
+  const box = svg.querySelector("#htx");
+  box.innerHTML = rows.map(([txt, col, w], k) => `<text style="fill:${col};font-size:${k === 0 && sh.mine ? 13 : 12}px;font-weight:${w}"></text>`).join("");
+  const texts = [...box.querySelectorAll("text")];
+  texts.forEach((el, k) => { el.textContent = rows[k][0]; });
+  const bw = Math.ceil(Math.max(...texts.map(el => el.getComputedTextLength()))) + 20;
   let bx = x + bw + 12 > W ? x - bw - 10 : x + 10;
   bx = Math.max(2, Math.min(bx, W - bw - 2));
-  const rr = svg.querySelector("#hr"); rr.setAttribute("x", bx); rr.setAttribute("y", T); rr.setAttribute("width", bw);
-  t1.setAttribute("x", bx + 10); t1.setAttribute("y", T + 17);
-  t2.setAttribute("x", bx + 10); t2.setAttribute("y", T + 33);
-  t3.setAttribute("x", bx + 10); t3.setAttribute("y", T + 49);
+  const rr = svg.querySelector("#hr"); rr.setAttribute("x", bx); rr.setAttribute("y", T); rr.setAttribute("width", bw); rr.setAttribute("height", 10 + rows.length * 16);
+  texts.forEach((el, k) => { el.setAttribute("x", bx + 10); el.setAttribute("y", T + 17 + k * 16); });
 }
 const hide = () => { const g = svg.querySelector("#hover"); if (g) g.style.display = "none"; };
 svg.addEventListener("pointermove", e => showAt(e.clientX));
@@ -659,6 +718,18 @@ document.getElementById("copomUpdate").addEventListener("click", async () => {
     }
   } catch (e) {}
   try {
+    const end = new Date(), start = new Date(Date.now() - 45 * 864e5);
+    const br = d => d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+    const r = await fetch(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.226/dados?formato=json&dataInicial=${br(start)}&dataFinal=${br(end)}`, { cache: "no-store" });
+    const j = await r.json(); const last = j[j.length - 1];
+    const rate = parseFloat(String(last.valor).replace(",", "."));
+    if (!isNaN(rate)) {
+      trBase = { rate, date: last.data };
+      try { localStorage.setItem("investcalc.tr", JSON.stringify(trBase)); } catch (e) {}
+      gotSomething = true;
+    }
+  } catch (e) {}
+  try {
     const list = await fetchCopomHistory();
     const latest = l => [...l].sort((a, b) => b.date.localeCompare(a.date))[0].date;
     const noNew = latest(list) === latest(copom.list);
@@ -695,6 +766,49 @@ function renderIncome() {
   document.getElementById("incNote").textContent = t().incNote[state.tax] + " " + t().incKeepMsg(state.real ? rTxt : 0);
 }
 
+// The checklist above the chart: tick a line to show it, untick to hide it
+function renderLines(hit, hits2) {
+  const sh = state.show;
+  const when = h => h === null ? "100+" : h === 0 ? "—" : fdur(h);
+  const rate = r => pct(Math.round(r * 100) / 100) + " " + t().perYear;
+  const tax = taxed => taxed ? t().afterTax : t().noTax;
+  const rows = [
+    { id: "mine", color: "var(--purple)", name: t().total[state.tax](Math.round(state.cdiPct)), sub: rate(effRate()) + ", " + tax(cdiTaxed()), time: when(hit) },
+    { id: "selic", color: "var(--teal)", name: t().lnSelic, sub: rate(state.selic) + ", " + tax(selicTaxed()), time: when(hits2.selic) },
+    { id: "poup", color: "var(--orange)", name: t().lnPoup, sub: rate(poupRate()) + ", " + t().exempt, time: when(hits2.poup) },
+    { id: "pre", color: "var(--pink)", name: t().lnPre, sub: `<input class="rate-in" id="in-pre" inputmode="decimal" enterkeyhint="done" aria-label="${t().lnPre}"> % ${t().perYear}, ${tax(selicTaxed())}`, time: when(hits2.pre) },
+    { id: "ipca", color: "var(--sky)", name: t().lnIpca, sub: `IPCA + <input class="rate-in" id="in-ipca" inputmode="decimal" enterkeyhint="done" aria-label="${t().lnIpca}"> % = ${rate(ipcaPlusRate())}`, time: when(hits2.ipca) },
+    { id: "cap", color: "var(--grey)", name: t().invested, sub: "", time: "" },
+    { id: "target", color: "var(--gold)", name: t().targetLine, sub: "", time: "", dash: true },
+  ];
+  const box = document.getElementById("lines");
+  const focused = document.activeElement && document.activeElement.classList.contains("rate-in") ? document.activeElement.id : null;
+  if (focused) return; // don't rebuild while typing a rate
+  box.innerHTML = `<div class="ln-head"><span>${t().lnHead}</span><span>${t().lnTime}</span></div>` + rows.map(r =>
+    `<label class="ln${sh[r.id] ? "" : " off"}" style="--c:${r.color}">
+      <input type="checkbox" data-id="${r.id}" ${sh[r.id] ? "checked" : ""}>
+      <span class="nm">${r.name}${r.sub ? `<small>${r.sub}</small>` : ""}</span>
+      <span class="tm">${r.time}</span>
+    </label>`).join("");
+  const fmtIn = v => v.toLocaleString(t().locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  document.getElementById("in-pre").value = fmtIn(state.preRate);
+  document.getElementById("in-ipca").value = fmtIn(state.ipcaSpread);
+}
+document.getElementById("lines").addEventListener("change", e => {
+  const cb = e.target.closest("input[type=checkbox]"); if (!cb) return;
+  state.show[cb.dataset.id] = cb.checked; update();
+});
+document.getElementById("lines").addEventListener("click", e => {
+  if (e.target.classList.contains("rate-in")) e.preventDefault(); // tapping the rate box shouldn't toggle the checkbox
+});
+document.getElementById("lines").addEventListener("focusout", e => {
+  const el = e.target; if (!el.classList.contains("rate-in")) return;
+  const n = parseFloat(String(el.value).replace(",", ".").replace(/[^0-9.]/g, ""));
+  if (!isNaN(n) && n >= 0 && n <= 50) { if (el.id === "in-pre") state.preRate = n; else state.ipcaSpread = n; }
+  setTimeout(update, 0);
+});
+document.getElementById("lines").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.classList.contains("rate-in")) e.target.blur(); });
+
 function update() {
   FIELDS.forEach(f => {
     const r = document.getElementById("r-" + f.id);
@@ -705,7 +819,7 @@ function update() {
   document.getElementById("taxSeg").innerHTML = t().taxOpts.map(([v, l, sm]) =>
     `<button type="button" role="radio" data-v="${v}" aria-checked="${state.tax === v}">${l}<small>${sm}</small></button>`).join("");
   document.getElementById("taxHint").textContent = t().taxHint[state.tax];
-  document.getElementById("totalLbl").textContent = t().total[state.tax](Math.round(state.cdiPct));
+
   renderIncome();
   const h = document.getElementById("cdiHint");
   if (h) h.textContent = t().cdiHint(pct(cdiBase.rate), fdate(cdiBase.date), pct(Math.round(effRate() * 100) / 100));
@@ -727,10 +841,11 @@ function update() {
     const p = simulate(hit)[hit];
     split.textContent = p.tax > 0 ? t().splitTax(usd(p.cap), usd(p.bal - p.cap), usd(p.tax), hit) : t().split(usd(p.cap), usd(p.bal - p.cap), hit);
   }
-  const hitS = monthsToTarget(state.selic, selicTaxed());
-  const sl = document.getElementById("selicLine");
-  sl.textContent = hit === 0 ? "" : hitS === null ? t().selicNever : t().selicHit(fdur(hitS));
-  draw(hit, hitS);
+  const hits2 = {};
+  COMPARE.forEach(c => { hits2[c.id] = monthsToTarget(c.rate(), c.taxed()); });
+  const hitS = hits2.selic;
+  renderLines(hit, hits2);
+  draw(hit, hits2);
   try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
 }
 applyLang();
