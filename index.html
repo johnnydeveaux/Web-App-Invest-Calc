@@ -111,12 +111,15 @@
   .copom .status { width: 100%; font-size: 11px; }
   .hist { margin-top: 10px; }
   .hist[hidden] { display: none; }
-  .chips { display: flex; gap: 6px; margin-bottom: 8px; }
+  .chips { display: flex; gap: 6px; margin: 0 -6px 8px; padding: 2px 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chip { flex: none; scroll-snap-align: start; }
   .chip { background: none; border: 1px solid var(--line); color: var(--faint); border-radius: 12px; padding: 2px 10px; font: inherit; cursor: pointer; }
   .chip[aria-pressed=true] { border-color: var(--muted); color: var(--text); }
   #copomChart { width: 100%; height: auto; display: block; margin-bottom: 6px; }
   #copomChart text { font-size: 18px; fill: var(--faint); }
   .list { max-height: 190px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 6px; -webkit-overflow-scrolling: touch; }
+  .list.more { -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
   .list .y { color: var(--muted); margin-top: 6px; }
   .foot button { background: none; border: 0; color: var(--muted); font: inherit; padding: 6px 4px; cursor: pointer; }
   .foot button:focus-visible { outline: 2px solid var(--blue); border-radius: 6px; }
@@ -177,7 +180,7 @@
 </div>
 
 <script>
-const VERSION = "3.0";
+const VERSION = "4.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -233,7 +236,7 @@ const I18N = {
     split: (c, g, m) => `You put in ${c}, growth adds ${g} (${m} months)`,
     never: "100+ years", neverSub: v => `This mix won't reach ${v}. Raise the monthly contribution or return rate.`,
     already: "Already there", alreadySub: v => `Your starting principal already meets ${v}.`,
-    tip: (y, c) => `${y} yrs, ${c} in`, tipSelic: v => `SELIC ${v}`, copomTitle: "Recent Copom meetings (SELIC rate)", current: "current", showHist: "Show history", hideHist: "Hide history", update: "Update rates", updating: "Updating…", held: "held", all: "All", y1: "1 year", y2: "2 years", stBuiltin: d => `Built-in data through ${d}`, stUpdated: d => `Updated ${d} from Banco Central`, stError: "Couldn't reach Banco Central. Showing saved rates.", stNoNew: d => `Already up to date (checked ${d})`, axis: "yrs", switchTo: "Mudar para português", flag: FLAG_BR, htmlLang: "en"
+    tip: (y, c) => `${y} yrs, ${c} in`, tipSelic: v => `SELIC ${v}`, copomTitle: "Recent Copom meetings (SELIC rate)", current: "current", yrs: n => n === 1 ? "1 year" : `${n} years`, showHist: "Show history", hideHist: "Hide history", update: "Update rates", updating: "Updating…", held: "held", all: "All", y1: "1 year", y2: "2 years", stBuiltin: d => `Built-in data through ${d}`, stUpdated: d => `Updated ${d} from Banco Central`, stError: "Couldn't reach Banco Central. Showing saved rates.", stNoNew: d => `Already up to date (checked ${d})`, axis: "yrs", switchTo: "Mudar para português", flag: FLAG_BR, htmlLang: "en"
   },
   pt: {
     locale: "pt-BR", timeTo: "Tempo para atingir a meta", years: "anos", months: "meses",
@@ -261,7 +264,7 @@ const I18N = {
     split: (c, g, m) => `Você investe ${c}, o rendimento soma ${g} (${m} meses)`,
     never: "100+ anos", neverSub: v => `Com esses valores você não chega a ${v}. Aumente o aporte mensal ou a taxa de retorno.`,
     already: "Meta já atingida", alreadySub: v => `Seu capital inicial já alcança ${v}.`,
-    tip: (y, c) => `${y} anos, ${c} investidos`, tipSelic: v => `SELIC ${v}`, copomTitle: "Últimas reuniões do Copom (taxa SELIC)", current: "atual", showHist: "Ver histórico", hideHist: "Ocultar histórico", update: "Atualizar taxas", updating: "Atualizando…", held: "manteve", all: "Tudo", y1: "1 ano", y2: "2 anos", stBuiltin: d => `Dados embutidos até ${d}`, stUpdated: d => `Atualizado em ${d} pelo Banco Central`, stError: "Não foi possível acessar o Banco Central. Mostrando taxas salvas.", stNoNew: d => `Já está atualizado (verificado em ${d})`, axis: "anos", switchTo: "Switch to English", flag: FLAG_US, htmlLang: "pt-BR"
+    tip: (y, c) => `${y} anos, ${c} investidos`, tipSelic: v => `SELIC ${v}`, copomTitle: "Últimas reuniões do Copom (taxa SELIC)", current: "atual", yrs: n => n === 1 ? "1 ano" : `${n} anos`, showHist: "Ver histórico", hideHist: "Ocultar histórico", update: "Atualizar taxas", updating: "Atualizando…", held: "manteve", all: "Tudo", y1: "1 ano", y2: "2 anos", stBuiltin: d => `Dados embutidos até ${d}`, stUpdated: d => `Atualizado em ${d} pelo Banco Central`, stError: "Não foi possível acessar o Banco Central. Mostrando taxas salvas.", stNoNew: d => `Já está atualizado (verificado em ${d})`, axis: "anos", switchTo: "Switch to English", flag: FLAG_US, htmlLang: "pt-BR"
   }
 };
 let lang = localStorage.getItem("investcalc.lang") === "pt" ? "pt" : "en";
@@ -462,9 +465,15 @@ function renderCopom() {
   if (!copomError) document.getElementById("copomStatus").textContent += ". " + t().stCdi(pct(cdiBase.rate), fdate(cdiBase.date));
   if (!histOpen) return;
 
-  document.getElementById("chips").innerHTML = [[12, t().y1], [24, t().y2], [0, t().all]].map(([v, l]) =>
-    `<button class="chip" type="button" data-r="${v}" aria-pressed="${histRange === v}">${l}</button>`).join("");
-  const cutoff = histRange ? new Date(Date.now() - histRange * 30.44 * 864e5).toISOString().slice(0, 10) : "0000";
+  // One chip per year of data available: 1 year, 2 years ... up to all of it
+  const spanYears = Math.max(1, Math.ceil((Date.now() - Date.parse(desc[desc.length - 1].date)) / (365.25 * 864e5)));
+  if (histRange > spanYears * 12) histRange = spanYears * 12;
+  const chipsEl = document.getElementById("chips");
+  const keepScroll = chipsEl.scrollLeft;
+  chipsEl.innerHTML = Array.from({ length: spanYears }, (_, k) => k + 1).map(y =>
+    `<button class="chip" type="button" data-r="${y * 12}" aria-pressed="${histRange === y * 12}">${t().yrs(y)}</button>`).join("");
+  chipsEl.scrollLeft = keepScroll;
+  const cutoff = new Date(Date.now() - histRange * 30.44 * 864e5).toISOString().slice(0, 10);
   const inRange = desc.filter(c => c.date >= cutoff);
   const asc = [...inRange].reverse();
 
@@ -500,8 +509,17 @@ function renderCopom() {
     if (y !== yr) { html += `<div class="y">${y}</div>`; yr = y; }
     html += `<div class="r"><span class="d">${fdate(c.date)}</span><span>${frate(c.rate)}</span>${changeTag(desc, desc.indexOf(c))}</div>`;
   });
-  document.getElementById("copomList").innerHTML = html;
+  const listEl = document.getElementById("copomList");
+  listEl.innerHTML = html;
+  listEl.scrollTop = 0;
+  updateFade();
 }
+// Fade the bottom of the history list while there's more to scroll
+function updateFade() {
+  const el = document.getElementById("copomList");
+  el.classList.toggle("more", el.scrollHeight - el.scrollTop - el.clientHeight > 4);
+}
+document.getElementById("copomList").addEventListener("scroll", updateFade, { passive: true });
 document.getElementById("histToggle").addEventListener("click", () => { histOpen = !histOpen; renderCopom(); });
 document.getElementById("chips").addEventListener("click", e => {
   const b = e.target.closest(".chip"); if (!b) return;
