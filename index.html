@@ -35,7 +35,7 @@
   html, body { margin: 0; background: var(--bg); color: var(--text); }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans", Ubuntu, sans-serif;
-    padding: max(16px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
+    padding: calc(env(safe-area-inset-top) + 22px) max(14px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
     -webkit-text-size-adjust: 100%;
   }
   .wrap { max-width: 640px; margin: 0 auto; }
@@ -64,6 +64,7 @@
   .ln input[type=checkbox]:checked::after { content: ""; width: 5px; height: 10px; border: solid #1f2126; border-width: 0 2.5px 2.5px 0; transform: rotate(45deg) translate(-1px, -1px); }
   .ln input[type=checkbox]:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
   .ln .nm { flex: 1; min-width: 0; font-size: 14px; color: var(--text); line-height: 1.3; }
+  .ln .nm small.brk { margin-top: 2px; color: var(--muted); }
   .ln .nm small { display: block; font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
   .ln .tm { font-size: 13px; color: var(--muted); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .ln.off .nm, .ln.off .tm { opacity: .45; }
@@ -162,13 +163,12 @@
   <header><h1>Invest Calc</h1><span class="ver" id="ver"></span><button class="flag" id="lang" type="button"></button></header>
 
   <div class="card">
-    <div class="result">
+    <div class="result" hidden>
       <div class="k" data-t="timeTo"></div>
       <div class="big" id="years">–</div>
       <div class="sub" id="subtitle"></div>
       <div class="split" id="split"></div>
     </div>
-    <hr>
     <div class="chartbox">
       <div class="lines" id="lines"></div>
       <svg id="chart" viewBox="0 0 600 300" aria-label="Growth chart"></svg>
@@ -223,7 +223,7 @@
 </div>
 
 <script>
-const VERSION = "9.0";
+const VERSION = "10.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -262,7 +262,7 @@ const FLAG_US = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" he
 const I18N = {
   en: {
     locale: "en-US", timeTo: "Time to reach target goal", years: "years", months: "months",
-    lnHead: "Lines on the chart", lnTime: "Time to goal", perYear: "a year", afterTax: "after tax", noTax: "no tax", exempt: "tax-free",
+    lnHead: "Lines on the chart", lnTime: v => `Time to ${v}`, brk: (c, g, x) => `You invest ${c}, earn ${g}` + (x ? `, tax ${x}` : ", no tax"), perYear: "a year", afterTax: "after tax", noTax: "no tax", exempt: "tax-free",
     lnSelic: "SELIC (Tesouro Selic)", lnPoup: "Poupança (savings)", lnPre: "Prefixado (fixed rate)", lnIpca: "IPCA+ (inflation + rate)",
     short: { selic: "SELIC", poup: "Poupança", pre: "Prefixado", ipca: "IPCA+" },
     total: { none: n => `My investment (${n}% of CDI)`, cdb: n => `My CDB/RDB (${n}% of CDI)`, lci: n => `My LCI/LCA (${n}% of CDI)` }, invested: "Invested capital", targetLine: "Target line",
@@ -308,7 +308,7 @@ const I18N = {
   },
   pt: {
     locale: "pt-BR", timeTo: "Tempo para atingir a meta", years: "anos", months: "meses",
-    lnHead: "Linhas no gráfico", lnTime: "Tempo até a meta", perYear: "a.a.", afterTax: "após IR", noTax: "sem IR", exempt: "isenta de IR",
+    lnHead: "Linhas no gráfico", lnTime: v => `Tempo até ${v}`, brk: (c, g, x) => `Você investe ${c}, rende ${g}` + (x ? `, IR ${x}` : ", sem IR"), perYear: "a.a.", afterTax: "após IR", noTax: "sem IR", exempt: "isenta de IR",
     lnSelic: "SELIC (Tesouro Selic)", lnPoup: "Poupança", lnPre: "Prefixado", lnIpca: "IPCA+ (inflação + taxa)",
     short: { selic: "SELIC", poup: "Poupança", pre: "Prefixado", ipca: "IPCA+" },
     total: { none: n => `Meu investimento (${n}% do CDI)`, cdb: n => `Meu CDB/RDB (${n}% do CDI)`, lci: n => `Minha LCI/LCA (${n}% do CDI)` }, invested: "Capital investido", targetLine: "Linha da meta",
@@ -770,24 +770,30 @@ function renderIncome() {
 function renderLines(hit, hits2) {
   const sh = state.show;
   const when = h => h === null ? "100+" : h === 0 ? "—" : fdur(h);
+  // Money breakdown at the month each line reaches the goal
+  const brk = (r, taxed, h) => {
+    if (h === null || !h) return "";
+    const v = series(r, h, taxed)[h], cap = state.principal + state.monthly * h;
+    return t().brk(usd(cap), usd(v.net - cap), v.tax > 0 ? usd(v.tax) : null);
+  };
   const rate = r => pct(Math.round(r * 100) / 100) + " " + t().perYear;
   const tax = taxed => taxed ? t().afterTax : t().noTax;
   const rows = [
-    { id: "mine", color: "var(--purple)", name: t().total[state.tax](Math.round(state.cdiPct)), sub: rate(effRate()) + ", " + tax(cdiTaxed()), time: when(hit) },
-    { id: "selic", color: "var(--teal)", name: t().lnSelic, sub: rate(state.selic) + ", " + tax(selicTaxed()), time: when(hits2.selic) },
-    { id: "poup", color: "var(--orange)", name: t().lnPoup, sub: rate(poupRate()) + ", " + t().exempt, time: when(hits2.poup) },
-    { id: "pre", color: "var(--pink)", name: t().lnPre, sub: `<input class="rate-in" id="in-pre" inputmode="decimal" enterkeyhint="done" aria-label="${t().lnPre}"> % ${t().perYear}, ${tax(selicTaxed())}`, time: when(hits2.pre) },
-    { id: "ipca", color: "var(--sky)", name: t().lnIpca, sub: `IPCA + <input class="rate-in" id="in-ipca" inputmode="decimal" enterkeyhint="done" aria-label="${t().lnIpca}"> % = ${rate(ipcaPlusRate())}`, time: when(hits2.ipca) },
+    { id: "mine", color: "var(--purple)", name: t().total[state.tax](Math.round(state.cdiPct)), sub: rate(effRate()) + ", " + tax(cdiTaxed()), extra: brk(effRate(), cdiTaxed(), hit), time: when(hit) },
+    { id: "selic", color: "var(--teal)", name: t().lnSelic, sub: rate(state.selic) + ", " + tax(selicTaxed()), extra: brk(state.selic, selicTaxed(), hits2.selic), time: when(hits2.selic) },
+    { id: "poup", color: "var(--orange)", name: t().lnPoup, sub: rate(poupRate()) + ", " + t().exempt, extra: brk(poupRate(), false, hits2.poup), time: when(hits2.poup) },
+    { id: "pre", color: "var(--pink)", name: t().lnPre, sub: `<input class="rate-in" id="in-pre" inputmode="decimal" enterkeyhint="done" aria-label="${t().lnPre}"> % ${t().perYear}, ${tax(selicTaxed())}`, extra: brk(state.preRate, selicTaxed(), hits2.pre), time: when(hits2.pre) },
+    { id: "ipca", color: "var(--sky)", name: t().lnIpca, sub: `IPCA + <input class="rate-in" id="in-ipca" inputmode="decimal" enterkeyhint="done" aria-label="${t().lnIpca}"> % = ${rate(ipcaPlusRate())}`, extra: brk(ipcaPlusRate(), selicTaxed(), hits2.ipca), time: when(hits2.ipca) },
     { id: "cap", color: "var(--grey)", name: t().invested, sub: "", time: "" },
     { id: "target", color: "var(--gold)", name: t().targetLine, sub: "", time: "", dash: true },
   ];
   const box = document.getElementById("lines");
   const focused = document.activeElement && document.activeElement.classList.contains("rate-in") ? document.activeElement.id : null;
   if (focused) return; // don't rebuild while typing a rate
-  box.innerHTML = `<div class="ln-head"><span>${t().lnHead}</span><span>${t().lnTime}</span></div>` + rows.map(r =>
+  box.innerHTML = `<div class="ln-head"><span>${t().lnHead}</span><span>${t().lnTime(usd(state.target))}</span></div>` + rows.map(r =>
     `<label class="ln${sh[r.id] ? "" : " off"}" style="--c:${r.color}">
       <input type="checkbox" data-id="${r.id}" ${sh[r.id] ? "checked" : ""}>
-      <span class="nm">${r.name}${r.sub ? `<small>${r.sub}</small>` : ""}</span>
+      <span class="nm">${r.name}${r.sub ? `<small>${r.sub}</small>` : ""}${r.extra ? `<small class="brk">${r.extra}</small>` : ""}</span>
       <span class="tm">${r.time}</span>
     </label>`).join("");
   const fmtIn = v => v.toLocaleString(t().locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
