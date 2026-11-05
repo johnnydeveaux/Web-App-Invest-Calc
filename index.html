@@ -26,6 +26,7 @@
     --gold: #f4c247;
     --green: #4caf61;
     --teal: #2fbfae;
+    --purple: #a374f5;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
@@ -59,11 +60,27 @@
   #chart text { font-size: 15px; fill: var(--faint); font-variant-numeric: tabular-nums; }
   .controls { padding: 10px 24px 22px; }
   .row { padding: 14px 0 6px; }
+  .gloss { margin: 28px 6px 8px; }
+  .gloss h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 8px; }
+  .gloss table { width: 100%; border-collapse: collapse; font-size: 12px; color: var(--faint); line-height: 1.45; }
+  .gloss td { padding: 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
+  .gloss td:first-child { width: 64px; color: var(--muted); font-weight: 600; padding-right: 10px; }
+  .gloss b { color: var(--muted); font-weight: 500; }
+  .taxrow { padding: 0 24px 24px; margin-top: -8px; }
+  .taxrow .lbl { font-size: 16px; font-weight: 500; margin-bottom: 10px; }
+  .seg { display: flex; background: var(--bg); border-radius: 12px; padding: 3px; gap: 3px; }
+  .seg button { flex: 1; background: none; border: 0; color: var(--muted); font: inherit; font-size: 14px; padding: 9px 4px; border-radius: 9px; cursor: pointer; line-height: 1.2; }
+  .seg button small { display: block; font-size: 11px; color: var(--faint); margin-top: 2px; }
+  .seg button[aria-checked=true] { background: var(--track); color: var(--text); font-weight: 600; }
+  .seg button[aria-checked=true] small { color: var(--muted); font-weight: 400; }
+  .seg button:focus-visible { outline: 2px solid var(--blue); }
+  .taxrow .hint { margin-top: 10px; line-height: 1.45; }
+  .hint { font-size: 13px; color: var(--faint); margin-top: 6px; font-variant-numeric: tabular-nums; }
   .row label { display: block; font-size: 16px; font-weight: 500; margin-bottom: 10px; }
   .line { display: flex; align-items: center; gap: 14px; }
   .line input[type=range] { flex: 1; }
   .val {
-    width: 120px; text-align: right; font-size: 18px; font-weight: 600; color: var(--text);
+    width: 150px; text-align: right; font-size: 18px; font-weight: 600; color: var(--text);
     background: transparent; border: 1px solid transparent; border-radius: 8px; padding: 4px 6px;
     font-family: inherit; font-variant-numeric: tabular-nums;
   }
@@ -120,7 +137,7 @@
     <hr>
     <div class="chartbox">
       <div class="legend">
-        <span><i class="dot" style="background:var(--blue)"></i><span data-t="total"></span></span>
+        <span><i class="dot" style="background:var(--purple)"></i><span id="totalLbl"></span></span>
         <span><i class="dot" style="background:var(--grey)"></i><span data-t="invested"></span></span>
         <span><i class="dot" style="background:var(--teal)"></i><span data-t="selicBal"></span></span>
         <span><i class="dash"></i><span data-t="targetLine"></span></span>
@@ -129,6 +146,11 @@
     </div>
     <hr>
     <div class="controls" id="controls"></div>
+    <div class="taxrow">
+      <div class="lbl" data-t="taxTitle"></div>
+      <div class="seg" id="taxSeg" role="radiogroup"></div>
+      <div class="hint" id="taxHint"></div>
+    </div>
   </div>
 
   <div class="foot">
@@ -148,10 +170,14 @@
       <div class="list" id="copomList"></div>
     </div>
   </div>
+  <section class="gloss" aria-labelledby="glossTitle">
+    <h2 id="glossTitle" data-t="glossTitle"></h2>
+    <table id="glossTable"></table>
+  </section>
 </div>
 
 <script>
-const VERSION = "2.0";
+const VERSION = "3.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -163,6 +189,15 @@ const COPOM_BUILTIN = [
 ].map(([date, rate]) => ({ date, rate }));
 let copom = { list: COPOM_BUILTIN, updated: null, source: "builtin" };
 try { const c = JSON.parse(localStorage.getItem("investcalc.copom")); if (c && c.list && c.list.length) copom = c; } catch (e) {}
+// CDI rate (annual, base 252). Built-in value; "Update rates" refreshes it from Banco Central (SGS 4389)
+const CDI_BUILTIN = { rate: 13.65, date: "2026-11-04" };
+let cdiBase = CDI_BUILTIN;
+try { const c = JSON.parse(localStorage.getItem("investcalc.cdi")); if (c && typeof c.rate === "number") cdiBase = c; } catch (e) {}
+// "% of CDI" is applied to the daily CDI rate, then compounded over 252 business days (how Brazilian banks calculate it)
+function effRate() {
+  const daily = Math.pow(1 + cdiBase.rate / 100, 1 / 252) - 1;
+  return (Math.pow(1 + daily * state.cdiPct / 100, 252) - 1) * 100;
+}
 let histRange = 24, histOpen = false, copomError = false, copomBusy = false;
 
 const FLAG_BR = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#009b3a"/><path d="M20 3.5 36.5 14 20 24.5 3.5 14z" fill="#fedf00"/><circle cx="20" cy="14" r="6.6" fill="#002776"/><path d="M13.6 12.6c4.3-.9 9-.3 12.7 1.9" stroke="#fff" stroke-width="1.3" fill="none"/></svg>';
@@ -174,10 +209,26 @@ const FLAG_US = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" he
 const I18N = {
   en: {
     locale: "en-US", timeTo: "Time to reach target goal", years: "years", months: "months",
-    total: "Total balance", invested: "Invested capital", targetLine: "Target line",
-    target: "Target future value", principal: "Starting principal", monthly: "Monthly contribution", rate: "CDI (Interbank Deposit Certificate)", selic: "SELIC (Special Settlement and Custody System)", selicBal: "SELIC balance",
+    total: { none: n => `My investment (${n}% of CDI)`, cdb: n => `My CDB/RDB (${n}% of CDI)`, lci: n => `My LCI/LCA (${n}% of CDI)` }, invested: "Invested capital", targetLine: "Target line",
+    target: "Target future value", principal: "Starting principal", monthly: "Monthly contribution", taxTitle: "Investment type", taxOpts: [["none", "No tax", "gross"], ["cdb", "CDB / RDB", "taxed"], ["lci", "LCI / LCA", "tax-free"]],
+    glossTitle: "Glossary",
+    gloss: [
+      ["CDI", "Certificado de Depósito Interbancário", "Interbank lending rate. Almost every fixed-income product in Brazil pays a % of it."],
+      ["SELIC", "Sistema Especial de Liquidação e Custódia", "Brazil's basic interest rate, set by the Copom. The CDI follows it closely."],
+      ["Copom", "Comitê de Política Monetária", "Central Bank committee that meets about every 45 days to set the SELIC."],
+      ["CDB", "Certificado de Depósito Bancário", "You lend money to a bank. Pays income tax (IR) on gains."],
+      ["RDB", "Recibo de Depósito Bancário", "Like a CDB, but can't be sold to someone else. Same tax. Nubank's Caixinhas are RDBs."],
+      ["LCI", "Letra de Crédito Imobiliário", "Bank bond that funds real estate. Tax-free for individuals."],
+      ["LCA", "Letra de Crédito do Agronegócio", "Bank bond that funds agribusiness. Tax-free for individuals."],
+      ["IR", "Imposto de Renda", "Income tax on gains: 22.5% up to 6 months, down to 15% after 2 years."],
+      ["FGC", "Fundo Garantidor de Créditos", "Protects up to R$250,000 per person per bank if the bank fails. Covers CDB, RDB, LCI and LCA."],
+      ["a.a.", "ao ano", "Per year. 13.75% a.a. means 13.75% a year."],
+    ],
+    taxHint: { none: "Showing gross returns, before income tax.", cdb: "Your CDB/RDB and SELIC pay IR on the gains: 22.5% up to 6 months, 20% up to 1 year, 17.5% up to 2 years, 15% after that. Each monthly deposit counts its own time.", lci: "Your CDI investment is tax-free. SELIC (Tesouro Selic) still pays IR on the gains: 22.5% down to 15% after 2 years." },
+    splitTax: (c, g, x, m) => `You put in ${c}, growth adds ${g} after ${x} in tax (${m} months)`,
+    cdiPct: "CDI (Interbank Deposit Certificate)", ofCdi: n => `${n}% of CDI`, cdiHint: (c, d, e) => `CDI ${c} a year (${d}), your return ${e} a year`, stCdi: (c, d) => `CDI ${c} on ${d}`, selic: "SELIC (Special Settlement and Custody System)", selicBal: "SELIC",
     selicHit: y => `At SELIC: ${y} years`, selicNever: "At SELIC: 100+ years",
-    method: "Main result uses CDI. Monthly compounding, deposits at month end", reset: "Reset",
+    method: "Main result uses your % of CDI. Monthly compounding, deposits at month end", reset: "Reset",
     projected: v => `Projected timeline to grow savings to ${v}.`,
     split: (c, g, m) => `You put in ${c}, growth adds ${g} (${m} months)`,
     never: "100+ years", neverSub: v => `This mix won't reach ${v}. Raise the monthly contribution or return rate.`,
@@ -186,10 +237,26 @@ const I18N = {
   },
   pt: {
     locale: "pt-BR", timeTo: "Tempo para atingir a meta", years: "anos", months: "meses",
-    total: "Saldo total", invested: "Capital investido", targetLine: "Linha da meta",
-    target: "Valor futuro desejado", principal: "Capital inicial", monthly: "Aporte mensal", rate: "CDI (Certificado de Depósito Interbancário)", selic: "SELIC (Sistema Especial de Liquidação e Custódia)", selicBal: "Saldo pela SELIC",
+    total: { none: n => `Meu investimento (${n}% do CDI)`, cdb: n => `Meu CDB/RDB (${n}% do CDI)`, lci: n => `Minha LCI/LCA (${n}% do CDI)` }, invested: "Capital investido", targetLine: "Linha da meta",
+    target: "Valor futuro desejado", principal: "Capital inicial", monthly: "Aporte mensal", taxTitle: "Tipo de investimento", taxOpts: [["none", "Sem IR", "bruto"], ["cdb", "CDB / RDB", "tributado"], ["lci", "LCI / LCA", "isento"]],
+    glossTitle: "Glossário",
+    gloss: [
+      ["CDI", "Certificado de Depósito Interbancário", "Taxa dos empréstimos entre bancos. Quase toda renda fixa no Brasil paga um % dela."],
+      ["SELIC", "Sistema Especial de Liquidação e Custódia", "Taxa básica de juros do Brasil, definida pelo Copom. O CDI fica sempre bem próximo dela."],
+      ["Copom", "Comitê de Política Monetária", "Comitê do Banco Central que se reúne a cada 45 dias, mais ou menos, para definir a SELIC."],
+      ["CDB", "Certificado de Depósito Bancário", "Você empresta dinheiro ao banco. Paga Imposto de Renda (IR) sobre o rendimento."],
+      ["RDB", "Recibo de Depósito Bancário", "Como um CDB, mas não pode ser vendido para outra pessoa. Mesmo IR. As Caixinhas do Nubank são RDBs."],
+      ["LCI", "Letra de Crédito Imobiliário", "Título de banco que financia o setor imobiliário. Isento de IR para pessoa física."],
+      ["LCA", "Letra de Crédito do Agronegócio", "Título de banco que financia o agronegócio. Isento de IR para pessoa física."],
+      ["IR", "Imposto de Renda", "Imposto sobre o rendimento: 22,5% até 6 meses, caindo para 15% após 2 anos."],
+      ["FGC", "Fundo Garantidor de Créditos", "Protege até R$ 250 mil por CPF por banco se o banco quebrar. Cobre CDB, RDB, LCI e LCA."],
+      ["a.a.", "ao ano", "Por ano. 13,75% a.a. significa 13,75% ao ano."],
+    ],
+    taxHint: { none: "Mostrando rendimento bruto, antes do Imposto de Renda.", cdb: "Seu CDB/RDB e a SELIC pagam IR sobre o rendimento: 22,5% até 6 meses, 20% até 1 ano, 17,5% até 2 anos e 15% depois disso. Cada aporte mensal conta o próprio prazo.", lci: "Seu investimento CDI é isento. A SELIC (Tesouro Selic) continua pagando IR sobre o rendimento: de 22,5% até 15% após 2 anos." },
+    splitTax: (c, g, x, m) => `Você investe ${c}, o rendimento soma ${g} já descontados ${x} de IR (${m} meses)`,
+    cdiPct: "CDI (Certificado de Depósito Interbancário)", ofCdi: n => `${n}% do CDI`, cdiHint: (c, d, e) => `CDI ${c} a.a. (${d}), seu rendimento ${e} a.a.`, stCdi: (c, d) => `CDI ${c} em ${d}`, selic: "SELIC (Sistema Especial de Liquidação e Custódia)", selicBal: "SELIC",
     selicHit: y => `Pela SELIC: ${y} anos`, selicNever: "Pela SELIC: 100+ anos",
-    method: "Resultado principal usa o CDI. Juros compostos mensais, aportes no fim do mês", reset: "Redefinir",
+    method: "Resultado principal usa seu % do CDI. Juros compostos mensais, aportes no fim do mês", reset: "Redefinir",
     projected: v => `Prazo projetado para suas economias chegarem a ${v}.`,
     split: (c, g, m) => `Você investe ${c}, o rendimento soma ${g} (${m} meses)`,
     never: "100+ anos", neverSub: v => `Com esses valores você não chega a ${v}. Aumente o aporte mensal ou a taxa de retorno.`,
@@ -205,18 +272,19 @@ const FIELDS = [
   { id: "target",    label: "Target future value",   min: 10000, max: 2000000, step: 10000, def: 1000000, money: true },
   { id: "principal", label: "Starting principal",    min: 0,     max: 500000,  step: 1000,  def: 141000,  money: true },
   { id: "monthly",   label: "Monthly contribution",  min: 0,     max: 30000,   step: 100,   def: 20000,   money: true },
-  { id: "rate",      label: "CDI",                   min: 0,     max: 20,      step: 0.05,  def: 13.7,    money: false },
+  { id: "cdiPct",    label: "CDI",                   min: 90,    max: 150,     step: 1,     def: 100,     money: false, cdi: true },
   { id: "selic",     label: "SELIC",                 min: 0,     max: 20,      step: 0.05,  def: 13.75,   money: false },
 ];
 const STORE = "investcalc.v1";
 let state = {};
 try { state = JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { state = {}; }
 FIELDS.forEach(f => { if (typeof state[f.id] !== "number" || isNaN(state[f.id])) state[f.id] = f.def; });
+if (!["none", "cdb", "lci"].includes(state.tax)) state.tax = "none";
 
 const usd = n => "$" + Math.round(n).toLocaleString(t().locale);
 const dec = n => (+n).toLocaleString(t().locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const pct = n => (+n).toLocaleString(t().locale, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + "%";
-const fmt = (f, v) => f.money ? usd(v) : pct(v);
+const fmt = (f, v) => f.money ? usd(v) : f.cdi ? t().ofCdi(Math.round(v)) : pct(v);
 const kfmt = n => n >= 1e7 ? "$" + dec(n / 1e6) + "M" : "$" + Math.round(n / 1000).toLocaleString(t().locale) + "k";
 
 // Build controls
@@ -228,18 +296,18 @@ FIELDS.forEach(f => {
     <div class="line">
       <input type="range" id="r-${f.id}" min="${f.min}" max="${Math.max(f.max, state[f.id])}" step="${f.step}">
       <input class="val" id="v-${f.id}" inputmode="decimal" enterkeyhint="done" >
-    </div>`;
+    </div>${f.cdi ? '<div class="hint" id="cdiHint"></div>' : ""}`;
   box.appendChild(row);
   const r = row.querySelector("input[type=range]");
   const v = row.querySelector(".val");
   r.value = state[f.id];
   r.addEventListener("input", () => { state[f.id] = +r.value; update(); });
-  v.addEventListener("focus", () => { v.value = f.money ? state[f.id] : pct(state[f.id]).replace("%", ""); v.select(); });
+  v.addEventListener("focus", () => { v.value = f.money || f.cdi ? state[f.id] : pct(state[f.id]).replace("%", ""); v.select(); });
   const commit = () => {
     const raw = String(v.value);
     const n = f.money ? parseFloat(raw.replace(/[^0-9]/g, "")) : parseFloat(raw.replace(",", ".").replace(/[^0-9.]/g, ""));
     if (!isNaN(n) && n >= 0) {
-      state[f.id] = f.money ? Math.round(n) : Math.min(n, 100);
+      state[f.id] = f.money ? Math.round(n) : f.cdi ? Math.min(Math.round(n), 300) : Math.min(n, 100);
       if (state[f.id] > +r.max) r.max = state[f.id];
       r.value = state[f.id];
     }
@@ -249,36 +317,47 @@ FIELDS.forEach(f => {
   v.addEventListener("keydown", e => { if (e.key === "Enter") v.blur(); });
 });
 
+document.getElementById("taxSeg").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  state.tax = b.dataset.v; update();
+});
 document.getElementById("reset").addEventListener("click", () => {
   FIELDS.forEach(f => {
     state[f.id] = f.def;
     const r = document.getElementById("r-" + f.id);
     r.max = f.max; r.value = f.def;
   });
+  state.tax = "none";
   update();
 });
 
 // Simulation: monthly compounding, contribution at end of each month
-function simulate(months) {
-  const i = state.rate / 100 / 12, j = state.selic / 100 / 12;
-  let bal = state.principal, sel = state.principal, cap = state.principal;
-  const pts = [{ m: 0, bal, sel, cap }];
-  for (let m = 1; m <= months; m++) {
-    bal = bal * (1 + i) + state.monthly;
-    sel = sel * (1 + j) + state.monthly;
-    cap += state.monthly;
-    pts.push({ m, bal, sel, cap });
+// Brazilian income tax (IR) on gains, regressive by holding time: <=180d 22.5%, <=360d 20%, <=720d 17.5%, then 15%
+const irRate = months => months < 6 ? 0.225 : months < 12 ? 0.20 : months < 24 ? 0.175 : 0.15;
+// Value after m months. Each deposit is its own lot with its own holding time, so tax is computed per lot.
+// gross(m) = P(1+i)^m + c * sum_{j<m} (1+i)^j ; tax(m) = P((1+i)^m-1)ir(m) + c * sum_{j<m} ((1+i)^j-1) ir(j)
+function series(rate, months, taxed) {
+  const i = rate / 100 / 12, P = state.principal, c = state.monthly;
+  const out = []; let sumG = 0, sumT = 0, g = 1;
+  for (let m = 0; m <= months; m++) {
+    const grow = Math.pow(1 + i, m);
+    const gross = P * grow + c * sumG;
+    const tax = taxed ? P * (grow - 1) * irRate(m) + c * sumT : 0;
+    out.push({ gross, tax, net: gross - tax });
+    sumG += g; sumT += (g - 1) * irRate(m); g *= (1 + i);
   }
-  return pts;
+  return out;
 }
-function monthsToTarget(rate = state.rate) {
+const cdiTaxed = () => state.tax === "cdb";
+const selicTaxed = () => state.tax !== "none";
+function simulate(months) {
+  const a = series(effRate(), months, cdiTaxed()), b = series(state.selic, months, selicTaxed());
+  return a.map((x, m) => ({ m, bal: x.net, gross: x.gross, tax: x.tax, sel: b[m].net, cap: state.principal + state.monthly * m }));
+}
+function monthsToTarget(rate = effRate(), taxed = cdiTaxed()) {
   if (state.principal >= state.target) return 0;
-  const i = rate / 100 / 12;
-  let bal = state.principal;
-  for (let m = 1; m <= 1200; m++) {
-    bal = bal * (1 + i) + state.monthly;
-    if (bal >= state.target) return m;
-  }
+  const s = series(rate, 1200, taxed);
+  for (let m = 1; m <= 1200; m++) if (s[m].net >= state.target) return m;
   return null; // not reached within 100 years
 }
 
@@ -310,10 +389,10 @@ function draw(hit, hitS) {
   s += `<line x1="${L}" x2="${W - R}" y1="${y(state.target)}" y2="${y(state.target)}" stroke="var(--gold)" stroke-width="2" stroke-dasharray="7 6"/>`;
   s += `<path d="${path("cap")}" fill="none" stroke="var(--grey)" stroke-width="2.5"/>`;
   s += `<path d="${path("sel")}" fill="none" stroke="var(--teal)" stroke-width="2.5" stroke-linecap="round"/>`;
-  s += `<path d="${path("bal")}" fill="none" stroke="var(--blue)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  s += `<path d="${path("bal")}" fill="none" stroke="var(--purple)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
   if (hitS !== null) s += `<circle cx="${x(hitS)}" cy="${y(state.target)}" r="5" fill="var(--teal)"/>`;
   if (hit !== null) s += `<circle cx="${x(hit)}" cy="${y(state.target)}" r="7" fill="var(--green)"/>`;
-  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--blue)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="56" fill="#1b1d22" stroke="#3a3d45"/><text id="ht1" style="fill:#e8eaed;font-size:13px"></text><text id="ht2" style="font-size:12px"></text><text id="ht3" style="font-size:12px;fill:var(--teal)"></text></g>`;
+  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--purple)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="56" fill="#1b1d22" stroke="#3a3d45"/><text id="ht1" style="fill:#e8eaed;font-size:13px"></text><text id="ht2" style="font-size:12px"></text><text id="ht3" style="font-size:12px;fill:var(--teal)"></text></g>`;
   svg.innerHTML = s;
 }
 
@@ -345,6 +424,7 @@ function applyLang() {
   document.querySelectorAll("[data-t]").forEach(el => { el.textContent = t()[el.dataset.t]; });
   FIELDS.forEach(f => document.getElementById("v-" + f.id).setAttribute("aria-label", t()[f.id]));
   renderCopom();
+  document.getElementById("glossTable").innerHTML = t().gloss.map(([a, full, d]) => `<tr><td>${a}</td><td><b>${full}</b><br>${d}</td></tr>`).join("");
   const b = document.getElementById("lang");
   b.innerHTML = t().flag; b.setAttribute("aria-label", t().switchTo); b.title = t().switchTo;
 }
@@ -379,6 +459,7 @@ function renderCopom() {
   document.getElementById("copomStatus").textContent = copomError ? t().stError
     : copom.source === "builtin" ? t().stBuiltin(fdate(desc[0].date))
     : copom.noNew ? t().stNoNew(fdate(copom.updated)) : t().stUpdated(fdate(copom.updated));
+  if (!copomError) document.getElementById("copomStatus").textContent += ". " + t().stCdi(pct(cdiBase.rate), fdate(cdiBase.date));
   if (!histOpen) return;
 
   document.getElementById("chips").innerHTML = [[12, t().y1], [24, t().y2], [0, t().all]].map(([v, l]) =>
@@ -457,14 +538,28 @@ async function fetchCopomHistory() {
 }
 document.getElementById("copomUpdate").addEventListener("click", async () => {
   copomBusy = true; copomError = false; renderCopom();
+  let gotSomething = false;
+  try {
+    const end = new Date(), start = new Date(Date.now() - 20 * 864e5);
+    const br = d => d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+    const r = await fetch(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados?formato=json&dataInicial=${br(start)}&dataFinal=${br(end)}`, { cache: "no-store" });
+    const j = await r.json(); const last = j[j.length - 1];
+    const [dd, mm, yy] = last.data.split("/");
+    const rate = parseFloat(String(last.valor).replace(",", "."));
+    if (!isNaN(rate)) {
+      cdiBase = { rate, date: `${yy}-${mm}-${dd}`, fetched: true };
+      try { localStorage.setItem("investcalc.cdi", JSON.stringify(cdiBase)); } catch (e) {}
+      gotSomething = true;
+    }
+  } catch (e) {}
   try {
     const list = await fetchCopomHistory();
     const latest = l => [...l].sort((a, b) => b.date.localeCompare(a.date))[0].date;
     const noNew = latest(list) === latest(copom.list);
     copom = { list, updated: new Date().toISOString().slice(0, 10), source: "bcb", noNew };
     try { localStorage.setItem("investcalc.copom", JSON.stringify(copom)); } catch (e) {}
-  } catch (e) { copomError = true; }
-  copomBusy = false; renderCopom();
+  } catch (e) { copomError = !gotSomething; }
+  copomBusy = false; renderCopom(); update();
 });
 
 function update() {
@@ -474,6 +569,12 @@ function update() {
     r.style.setProperty("--p", ((state[f.id] - r.min) / (r.max - r.min) * 100) + "%");
     if (document.activeElement !== v) v.value = fmt(f, state[f.id]);
   });
+  document.getElementById("taxSeg").innerHTML = t().taxOpts.map(([v, l, sm]) =>
+    `<button type="button" role="radio" data-v="${v}" aria-checked="${state.tax === v}">${l}<small>${sm}</small></button>`).join("");
+  document.getElementById("taxHint").textContent = t().taxHint[state.tax];
+  document.getElementById("totalLbl").textContent = t().total[state.tax](Math.round(state.cdiPct));
+  const h = document.getElementById("cdiHint");
+  if (h) h.textContent = t().cdiHint(pct(cdiBase.rate), fdate(cdiBase.date), pct(Math.round(effRate() * 100) / 100));
   const hit = monthsToTarget();
   const yearsEl = document.getElementById("years");
   const sub = document.getElementById("subtitle");
@@ -490,9 +591,9 @@ function update() {
     yearsEl.textContent = dec(hit / 12) + " " + t().years;
     sub.textContent = t().projected(usd(state.target));
     const p = simulate(hit)[hit];
-    split.textContent = t().split(usd(p.cap), usd(p.bal - p.cap), hit);
+    split.textContent = p.tax > 0 ? t().splitTax(usd(p.cap), usd(p.bal - p.cap), usd(p.tax), hit) : t().split(usd(p.cap), usd(p.bal - p.cap), hit);
   }
-  const hitS = monthsToTarget(state.selic);
+  const hitS = monthsToTarget(state.selic, selicTaxed());
   const sl = document.getElementById("selicLine");
   sl.textContent = hit === 0 ? "" : hitS === null ? t().selicNever : t().selicHit(dec(hitS / 12));
   draw(hit, hitS);
