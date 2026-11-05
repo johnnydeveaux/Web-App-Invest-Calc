@@ -180,7 +180,7 @@
 </div>
 
 <script>
-const VERSION = "5.0";
+const VERSION = "6.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -228,12 +228,13 @@ const I18N = {
       ["a.a.", "ao ano", "Per year. 13.75% a.a. means 13.75% a year."],
     ],
     taxHint: { none: "Showing gross returns, before income tax.", cdb: "Your CDB/RDB and SELIC pay IR on the gains: 22.5% up to 6 months, 20% up to 1 year, 17.5% up to 2 years, 15% after that. Each monthly deposit counts its own time.", lci: "Your CDI investment is tax-free. SELIC (Tesouro Selic) still pays IR on the gains: 22.5% down to 15% after 2 years." },
-    splitTax: (c, g, x, m) => `You put in ${c}, growth adds ${g} after ${x} in tax (${m} months)`,
+    splitTax: (c, g, x, m) => `You put in ${c}, growth adds ${g} after ${x} in tax`,
     cdiPct: "CDI (Interbank Deposit Certificate)", ofCdi: n => `${n}% of CDI`, cdiHint: (c, d, e) => `CDI ${c} a year (${d}), your return ${e} a year`, stCdi: (c, d) => `CDI ${c} on ${d}`, selic: "SELIC (Special Settlement and Custody System)", selicBal: "SELIC",
-    selicHit: y => `At SELIC: ${y} years`, selicNever: "At SELIC: 100+ years",
+    selicHit: y => `At SELIC: ${y}`,
+    dur: (y, m) => [y ? (y === 1 ? "1 year" : `${y} years`) : "", m ? (m === 1 ? "1 month" : `${m} months`) : ""].filter(Boolean).join(" "), selicNever: "At SELIC: 100+ years",
     method: "Main result uses your % of CDI. Monthly compounding, deposits at month end", reset: "Reset",
     projected: v => `Projected timeline to grow savings to ${v}.`,
-    split: (c, g, m) => `You put in ${c}, growth adds ${g} (${m} months)`,
+    split: (c, g) => `You put in ${c}, growth adds ${g}`,
     never: "100+ years", neverSub: v => `This mix won't reach ${v}. Raise the monthly contribution or return rate.`,
     already: "Already there", alreadySub: v => `Your starting principal already meets ${v}.`,
     tip: (y, c) => `${y} yrs, ${c} in`, tipSelic: v => `SELIC ${v}`, copomTitle: "Recent Copom meetings (SELIC rate)", current: "current", yrs: n => n === 1 ? "1 year" : `${n} years`, showHist: "Show history", hideHist: "Hide history", update: "Update rates", updating: "Updating…", held: "held", all: "All", y1: "1 year", y2: "2 years", stBuiltin: d => `Built-in data through ${d}`, stUpdated: d => `Updated ${d} from Banco Central`, stError: "Couldn't reach Banco Central. Showing saved rates.", stNoNew: d => `Already up to date (checked ${d})`, axis: "yrs", switchTo: "Mudar para português", flag: FLAG_BR, htmlLang: "en"
@@ -256,12 +257,13 @@ const I18N = {
       ["a.a.", "ao ano", "Por ano. 13,75% a.a. significa 13,75% ao ano."],
     ],
     taxHint: { none: "Mostrando rendimento bruto, antes do Imposto de Renda.", cdb: "Seu CDB/RDB e a SELIC pagam IR sobre o rendimento: 22,5% até 6 meses, 20% até 1 ano, 17,5% até 2 anos e 15% depois disso. Cada aporte mensal conta o próprio prazo.", lci: "Seu investimento CDI é isento. A SELIC (Tesouro Selic) continua pagando IR sobre o rendimento: de 22,5% até 15% após 2 anos." },
-    splitTax: (c, g, x, m) => `Você investe ${c}, o rendimento soma ${g} já descontados ${x} de IR (${m} meses)`,
+    splitTax: (c, g, x, m) => `Você investe ${c}, o rendimento soma ${g} já descontados ${x} de IR`,
     cdiPct: "CDI (Certificado de Depósito Interbancário)", ofCdi: n => `${n}% do CDI`, cdiHint: (c, d, e) => `CDI ${c} a.a. (${d}), seu rendimento ${e} a.a.`, stCdi: (c, d) => `CDI ${c} em ${d}`, selic: "SELIC (Sistema Especial de Liquidação e Custódia)", selicBal: "SELIC",
-    selicHit: y => `Pela SELIC: ${y} anos`, selicNever: "Pela SELIC: 100+ anos",
+    selicHit: y => `Pela SELIC: ${y}`,
+    dur: (y, m) => [y ? (y === 1 ? "1 ano" : `${y} anos`) : "", m ? (m === 1 ? "1 mês" : `${m} meses`) : ""].filter(Boolean).join(" e "), selicNever: "Pela SELIC: 100+ anos",
     method: "Resultado principal usa seu % do CDI. Juros compostos mensais, aportes no fim do mês", reset: "Redefinir",
     projected: v => `Prazo projetado para suas economias chegarem a ${v}.`,
-    split: (c, g, m) => `Você investe ${c}, o rendimento soma ${g} (${m} meses)`,
+    split: (c, g) => `Você investe ${c}, o rendimento soma ${g}`,
     never: "100+ anos", neverSub: v => `Com esses valores você não chega a ${v}. Aumente o aporte mensal ou a taxa de retorno.`,
     already: "Meta já atingida", alreadySub: v => `Seu capital inicial já alcança ${v}.`,
     tip: (y, c) => `${y} anos, ${c} investidos`, tipSelic: v => `SELIC ${v}`, copomTitle: "Últimas reuniões do Copom (taxa SELIC)", current: "atual", yrs: n => n === 1 ? "1 ano" : `${n} anos`, showHist: "Ver histórico", hideHist: "Ocultar histórico", update: "Atualizar taxas", updating: "Atualizando…", held: "manteve", all: "Tudo", y1: "1 ano", y2: "2 anos", stBuiltin: d => `Dados embutidos até ${d}`, stUpdated: d => `Atualizado em ${d} pelo Banco Central`, stError: "Não foi possível acessar o Banco Central. Mostrando taxas salvas.", stNoNew: d => `Já está atualizado (verificado em ${d})`, axis: "anos", switchTo: "Switch to English", flag: FLAG_US, htmlLang: "pt-BR"
@@ -589,6 +591,9 @@ document.getElementById("copomUpdate").addEventListener("click", async () => {
   copomBusy = false; renderCopom(); update();
 });
 
+// Months as "7 months" or "1 year 3 months"
+const fdur = months => t().dur(Math.floor(months / 12), months % 12);
+
 function update() {
   FIELDS.forEach(f => {
     const r = document.getElementById("r-" + f.id);
@@ -615,14 +620,14 @@ function update() {
     sub.textContent = t().alreadySub(usd(state.target));
     split.textContent = "";
   } else {
-    yearsEl.textContent = dec(hit / 12) + " " + t().years;
+    yearsEl.textContent = fdur(hit);
     sub.textContent = t().projected(usd(state.target));
     const p = simulate(hit)[hit];
     split.textContent = p.tax > 0 ? t().splitTax(usd(p.cap), usd(p.bal - p.cap), usd(p.tax), hit) : t().split(usd(p.cap), usd(p.bal - p.cap), hit);
   }
   const hitS = monthsToTarget(state.selic, selicTaxed());
   const sl = document.getElementById("selicLine");
-  sl.textContent = hit === 0 ? "" : hitS === null ? t().selicNever : t().selicHit(dec(hitS / 12));
+  sl.textContent = hit === 0 ? "" : hitS === null ? t().selicNever : t().selicHit(fdur(hitS));
   draw(hit, hitS);
   try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
 }
