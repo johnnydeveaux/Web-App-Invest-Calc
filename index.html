@@ -180,7 +180,7 @@
 </div>
 
 <script>
-const VERSION = "6.0";
+const VERSION = "7.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -237,7 +237,7 @@ const I18N = {
     split: (c, g) => `You put in ${c}, growth adds ${g}`,
     never: "100+ years", neverSub: v => `This mix won't reach ${v}. Raise the monthly contribution or return rate.`,
     already: "Already there", alreadySub: v => `Your starting principal already meets ${v}.`,
-    tip: (y, c) => `${y} yrs, ${c} in`, tipSelic: v => `SELIC ${v}`, copomTitle: "Recent Copom meetings (SELIC rate)", current: "current", yrs: n => n === 1 ? "1 year" : `${n} years`, showHist: "Show history", hideHist: "Hide history", update: "Update rates", updating: "Updating…", held: "held", all: "All", y1: "1 year", y2: "2 years", stBuiltin: d => `Built-in data through ${d}`, stUpdated: d => `Updated ${d} from Banco Central`, stError: "Couldn't reach Banco Central. Showing saved rates.", stNoNew: d => `Already up to date (checked ${d})`, axis: "yrs", switchTo: "Mudar para português", flag: FLAG_BR, htmlLang: "en"
+    tip: (y, c) => `${y}, ${c} invested`, tipSelic: v => `SELIC ${v}`, copomTitle: "Recent Copom meetings (SELIC rate)", current: "current", yrs: n => n === 1 ? "1 year" : `${n} years`, showHist: "Show history", hideHist: "Hide history", update: "Update rates", updating: "Updating…", held: "held", all: "All", y1: "1 year", y2: "2 years", stBuiltin: d => `Built-in data through ${d}`, stUpdated: d => `Updated ${d} from Banco Central`, stError: "Couldn't reach Banco Central. Showing saved rates.", stNoNew: d => `Already up to date (checked ${d})`, axis: "yrs", switchTo: "Mudar para português", flag: FLAG_BR, htmlLang: "en"
   },
   pt: {
     locale: "pt-BR", timeTo: "Tempo para atingir a meta", years: "anos", months: "meses",
@@ -266,7 +266,7 @@ const I18N = {
     split: (c, g) => `Você investe ${c}, o rendimento soma ${g}`,
     never: "100+ anos", neverSub: v => `Com esses valores você não chega a ${v}. Aumente o aporte mensal ou a taxa de retorno.`,
     already: "Meta já atingida", alreadySub: v => `Seu capital inicial já alcança ${v}.`,
-    tip: (y, c) => `${y} anos, ${c} investidos`, tipSelic: v => `SELIC ${v}`, copomTitle: "Últimas reuniões do Copom (taxa SELIC)", current: "atual", yrs: n => n === 1 ? "1 ano" : `${n} anos`, showHist: "Ver histórico", hideHist: "Ocultar histórico", update: "Atualizar taxas", updating: "Atualizando…", held: "manteve", all: "Tudo", y1: "1 ano", y2: "2 anos", stBuiltin: d => `Dados embutidos até ${d}`, stUpdated: d => `Atualizado em ${d} pelo Banco Central`, stError: "Não foi possível acessar o Banco Central. Mostrando taxas salvas.", stNoNew: d => `Já está atualizado (verificado em ${d})`, axis: "anos", switchTo: "Switch to English", flag: FLAG_US, htmlLang: "pt-BR"
+    tip: (y, c) => `${y}, ${c} investidos`, tipSelic: v => `SELIC ${v}`, copomTitle: "Últimas reuniões do Copom (taxa SELIC)", current: "atual", yrs: n => n === 1 ? "1 ano" : `${n} anos`, showHist: "Ver histórico", hideHist: "Ocultar histórico", update: "Atualizar taxas", updating: "Atualizando…", held: "manteve", all: "Tudo", y1: "1 ano", y2: "2 anos", stBuiltin: d => `Dados embutidos até ${d}`, stUpdated: d => `Atualizado em ${d} pelo Banco Central`, stError: "Não foi possível acessar o Banco Central. Mostrando taxas salvas.", stNoNew: d => `Já está atualizado (verificado em ${d})`, axis: "anos", switchTo: "Switch to English", flag: FLAG_US, htmlLang: "pt-BR"
   }
 };
 let lang = localStorage.getItem("investcalc.lang") === "pt" ? "pt" : "en";
@@ -397,7 +397,7 @@ function draw(hit, hitS) {
   s += `<path d="${path("bal")}" fill="none" stroke="var(--purple)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
   if (hitS !== null) s += `<circle cx="${x(hitS)}" cy="${y(state.target)}" r="5" fill="var(--teal)"/>`;
   if (hit !== null) s += `<circle cx="${x(hit)}" cy="${y(state.target)}" r="7" fill="var(--green)"/>`;
-  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--purple)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="56" fill="#1b1d22" stroke="#3a3d45"/><text id="ht1" style="fill:#e8eaed;font-size:13px"></text><text id="ht2" style="font-size:12px"></text><text id="ht3" style="font-size:12px;fill:var(--teal)"></text></g>`;
+  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--purple)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="56" fill="#1b1d22" stroke="#3a3d45"/><text id="ht1" style="fill:var(--purple);font-size:13px;font-weight:600"></text><text id="ht2" style="fill:#8b8f97;font-size:12px"></text><text id="ht3" style="font-size:12px;fill:var(--teal)"></text></g>`;
   svg.innerHTML = s;
 }
 
@@ -412,11 +412,18 @@ function showAt(clientX) {
   const g = svg.querySelector("#hover"); g.style.display = "";
   svg.querySelector("#hl").setAttribute("x1", x); svg.querySelector("#hl").setAttribute("x2", x);
   const c = svg.querySelector("#hc"); c.setAttribute("cx", x); c.setAttribute("cy", y);
-  const bw = 170, bx = x + bw + 12 > W ? x - bw - 10 : x + 10;
+  // Fill the text first, then size and place the box around it
+  const t1 = svg.querySelector("#ht1"), t2 = svg.querySelector("#ht2"), t3 = svg.querySelector("#ht3");
+  t1.textContent = usd(p.bal);
+  t2.textContent = t().tip(m ? fdur(m) : "0", usd(p.cap));
+  t3.textContent = t().tipSelic(usd(p.sel));
+  const bw = Math.ceil(Math.max(t1.getComputedTextLength(), t2.getComputedTextLength(), t3.getComputedTextLength())) + 20;
+  let bx = x + bw + 12 > W ? x - bw - 10 : x + 10;
+  bx = Math.max(2, Math.min(bx, W - bw - 2));
   const rr = svg.querySelector("#hr"); rr.setAttribute("x", bx); rr.setAttribute("y", T); rr.setAttribute("width", bw);
-  const t1 = svg.querySelector("#ht1"); t1.setAttribute("x", bx + 10); t1.setAttribute("y", T + 17); t1.textContent = usd(p.bal);
-  const t2 = svg.querySelector("#ht2"); t2.setAttribute("x", bx + 10); t2.setAttribute("y", T + 33); t2.textContent = t().tip(dec(m / 12), usd(p.cap));
-  const t3 = svg.querySelector("#ht3"); t3.setAttribute("x", bx + 10); t3.setAttribute("y", T + 49); t3.textContent = t().tipSelic(usd(p.sel));
+  t1.setAttribute("x", bx + 10); t1.setAttribute("y", T + 17);
+  t2.setAttribute("x", bx + 10); t2.setAttribute("y", T + 33);
+  t3.setAttribute("x", bx + 10); t3.setAttribute("y", T + 49);
 }
 const hide = () => { const g = svg.querySelector("#hover"); if (g) g.style.display = "none"; };
 svg.addEventListener("pointermove", e => showAt(e.clientX));
