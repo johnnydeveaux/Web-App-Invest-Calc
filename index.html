@@ -136,7 +136,7 @@
   .copom .r { display: flex; gap: 12px; }
   .copom .d { min-width: 110px; }
   .copom .chg { margin-left: auto; }
-  .copom .up { color: #d98a7a; } .copom .down { color: #7fbf8f; }
+  .copom .up { color: var(--green); } .copom .down { color: #e5604f; } /* for an investor: rate up = more income (green) */
   .copom .bar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 8px; }
   .copom .link { background: none; border: 0; padding: 4px 0; font: inherit; color: var(--muted); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
   .copom .link:disabled { opacity: .5; }
@@ -149,7 +149,7 @@
   .chip { flex: none; scroll-snap-align: start; }
   .chip { background: none; border: 1px solid var(--line); color: var(--faint); border-radius: 12px; padding: 2px 10px; font: inherit; cursor: pointer; }
   .chip[aria-pressed=true] { border-color: var(--muted); color: var(--text); }
-  #copomChart { width: 100%; height: auto; display: block; margin-bottom: 6px; }
+  #copomChart { width: 100%; height: auto; display: block; margin-bottom: 6px; touch-action: pan-y; user-select: none; -webkit-user-select: none; }
   #copomChart text { font-size: 18px; fill: var(--faint); }
   .list { max-height: 190px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 6px; -webkit-overflow-scrolling: touch; }
   .list.more { -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent); mask-image: linear-gradient(to bottom, #000 70%, transparent); }
@@ -223,7 +223,7 @@
 </div>
 
 <script>
-const VERSION = "10.0";
+const VERSION = "11.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -251,6 +251,7 @@ function effRate() {
   const daily = Math.pow(1 + cdiBase.rate / 100, 1 / 252) - 1;
   return (Math.pow(1 + daily * state.cdiPct / 100, 252) - 1) * 100;
 }
+let copomView = null;
 let histRange = 24, histOpen = false, copomError = false, copomBusy = false;
 
 const FLAG_BR = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#009b3a"/><path d="M20 3.5 36.5 14 20 24.5 3.5 14z" fill="#fedf00"/><circle cx="20" cy="14" r="6.6" fill="#002776"/><path d="M13.6 12.6c4.3-.9 9-.3 12.7 1.9" stroke="#fff" stroke-width="1.3" fill="none"/></svg>';
@@ -304,7 +305,7 @@ const I18N = {
     split: (c, g) => `You put in ${c}, growth adds ${g}`,
     never: "100+ years", neverSub: v => `This mix won't reach ${v}. Raise the monthly contribution or return rate.`,
     already: "Already there", alreadySub: v => `Your starting principal already meets ${v}.`,
-    tip: (y, c) => `${y}, ${c} invested`, tipSelic: v => `SELIC ${v}`, copomTitle: "Recent Copom meetings (SELIC rate)", current: "current", yrs: n => n === 1 ? "1 year" : `${n} years`, showHist: "Show history", hideHist: "Hide history", update: "Update rates", updating: "Updating…", held: "held", all: "All", y1: "1 year", y2: "2 years", stBuiltin: d => `Built-in data through ${d}`, stUpdated: d => `Updated ${d} from Banco Central`, stError: "Couldn't reach Banco Central. Showing saved rates.", stNoNew: d => `Already up to date (checked ${d})`, axis: "yrs", switchTo: "Mudar para português", flag: FLAG_BR, htmlLang: "en"
+    tip: (y, c) => `${y}, ${c} invested`, tipSelic: v => `SELIC ${v}`, copomTitle: "Recent Copom meetings (SELIC rate)", current: "current", yrs: n => n === 1 ? "1 year" : `${n} years`, showHist: "Show history", hideHist: "Hide history", update: "Update rates", updating: "Updating…", held: "held", cUp: "raised", cDown: "cut", all: "All", y1: "1 year", y2: "2 years", stBuiltin: d => `Built-in data through ${d}`, stUpdated: d => `Updated ${d} from Banco Central`, stError: "Couldn't reach Banco Central. Showing saved rates.", stNoNew: d => `Already up to date (checked ${d})`, axis: "yrs", switchTo: "Mudar para português", flag: FLAG_BR, htmlLang: "en"
   },
   pt: {
     locale: "pt-BR", timeTo: "Tempo para atingir a meta", years: "anos", months: "meses",
@@ -350,7 +351,7 @@ const I18N = {
     split: (c, g) => `Você investe ${c}, o rendimento soma ${g}`,
     never: "100+ anos", neverSub: v => `Com esses valores você não chega a ${v}. Aumente o aporte mensal ou a taxa de retorno.`,
     already: "Meta já atingida", alreadySub: v => `Seu capital inicial já alcança ${v}.`,
-    tip: (y, c) => `${y}, ${c} investidos`, tipSelic: v => `SELIC ${v}`, copomTitle: "Últimas reuniões do Copom (taxa SELIC)", current: "atual", yrs: n => n === 1 ? "1 ano" : `${n} anos`, showHist: "Ver histórico", hideHist: "Ocultar histórico", update: "Atualizar taxas", updating: "Atualizando…", held: "manteve", all: "Tudo", y1: "1 ano", y2: "2 anos", stBuiltin: d => `Dados embutidos até ${d}`, stUpdated: d => `Atualizado em ${d} pelo Banco Central`, stError: "Não foi possível acessar o Banco Central. Mostrando taxas salvas.", stNoNew: d => `Já está atualizado (verificado em ${d})`, axis: "anos", switchTo: "Switch to English", flag: FLAG_US, htmlLang: "pt-BR"
+    tip: (y, c) => `${y}, ${c} investidos`, tipSelic: v => `SELIC ${v}`, copomTitle: "Últimas reuniões do Copom (taxa SELIC)", current: "atual", yrs: n => n === 1 ? "1 ano" : `${n} anos`, showHist: "Ver histórico", hideHist: "Ocultar histórico", update: "Atualizar taxas", updating: "Atualizando…", held: "manteve", cUp: "alta", cDown: "corte", all: "Tudo", y1: "1 ano", y2: "2 anos", stBuiltin: d => `Dados embutidos até ${d}`, stUpdated: d => `Atualizado em ${d} pelo Banco Central`, stError: "Não foi possível acessar o Banco Central. Mostrando taxas salvas.", stNoNew: d => `Já está atualizado (verificado em ${d})`, axis: "anos", switchTo: "Switch to English", flag: FLAG_US, htmlLang: "pt-BR"
   }
 };
 let lang = localStorage.getItem("investcalc.lang") === "pt" ? "pt" : "en";
@@ -634,7 +635,10 @@ function renderCopom() {
     const xx = X(y + "-01-01");
     g += `<line x1="${xx}" x2="${xx}" y1="${tp}" y2="${ch - bt}" stroke="#30333b" stroke-dasharray="3 4"/><text x="${xx}" y="${ch - 6}" text-anchor="middle">${y}</text>`;
   }
+  // Readout card (hidden until you touch the chart)
+  g += `<g id="cHover" style="display:none"><line id="cHl" y1="${tp}" y2="${ch - bt}" stroke="#8a8f99" stroke-width="1"/><circle id="cHc" r="6" fill="var(--teal)" stroke="#fff" stroke-width="2"/><rect id="cHr" rx="10" fill="#1b1d22" stroke="#3a3d45"/><text id="cT1" style="fill:#a6aab3;font-size:19px"></text><text id="cT2" style="font-size:22px;font-weight:700;fill:var(--teal)"></text><text id="cT3" style="font-size:19px;font-weight:600"></text></g>`;
   document.getElementById("copomChart").innerHTML = g;
+  copomView = { asc, desc, X, Y, t0, t1, l, r, cw, ch, tp, bt };
 
   // List grouped by year
   let html = "", yr = "";
@@ -654,6 +658,46 @@ function updateFade() {
   el.classList.toggle("more", el.scrollHeight - el.scrollTop - el.clientHeight > 4);
 }
 document.getElementById("copomList").addEventListener("scroll", updateFade, { passive: true });
+// Touch / hold on the SELIC history chart: show the meeting in effect at that point
+function copomShowAt(clientX) {
+  const v = copomView; if (!v) return;
+  const svgEl = document.getElementById("copomChart");
+  const rect = svgEl.getBoundingClientRect();
+  const sx = (clientX - rect.left) / rect.width * v.cw;
+  const tt = v.t0 + Math.min(Math.max((sx - v.l) / (v.cw - v.l - v.r), 0), 1) * (v.t1 - v.t0);
+  let c = v.asc[0];
+  for (const m of v.asc) { if (Date.parse(m.date) <= tt) c = m; else break; }
+  const idx = v.desc.indexOf(c), prev = v.desc[idx + 1];
+  const d = prev ? Math.round((c.rate - prev.rate) * 100) / 100 : null;
+  const x = v.X(c.date), y = v.Y(c.rate);
+  const gEl = svgEl.querySelector("#cHover"); gEl.style.display = "";
+  const hl = svgEl.querySelector("#cHl"); hl.setAttribute("x1", x); hl.setAttribute("x2", x);
+  const hc = svgEl.querySelector("#cHc"); hc.setAttribute("cx", x); hc.setAttribute("cy", y);
+  const t1 = svgEl.querySelector("#cT1"), t2 = svgEl.querySelector("#cT2"), t3 = svgEl.querySelector("#cT3");
+  t1.textContent = fdate(c.date);
+  t2.textContent = frate(c.rate);
+  const amt = d === null ? "" : Math.abs(d).toLocaleString(t().locale, { minimumFractionDigits: 2 });
+  if (d === null) { t3.textContent = ""; }
+  else if (d > 0) { t3.textContent = `▲ ${amt} ${t().cUp}`; t3.style.fill = "var(--green)"; }
+  else if (d < 0) { t3.textContent = `▼ ${amt} ${t().cDown}`; t3.style.fill = "#e5604f"; }
+  else { t3.textContent = `= ${t().held}`; t3.style.fill = "#a6aab3"; }
+  const bw = Math.ceil(Math.max(t1.getComputedTextLength(), t2.getComputedTextLength(), t3.getComputedTextLength())) + 28;
+  const bh = t3.textContent ? 92 : 66;
+  let bx = x + bw + 14 > v.cw ? x - bw - 12 : x + 12;
+  bx = Math.max(v.l, Math.min(bx, v.cw - bw - 2));
+  const by = v.tp;
+  const rr = svgEl.querySelector("#cHr"); rr.setAttribute("x", bx); rr.setAttribute("y", by); rr.setAttribute("width", bw); rr.setAttribute("height", bh);
+  t1.setAttribute("x", bx + 14); t1.setAttribute("y", by + 26);
+  t2.setAttribute("x", bx + 14); t2.setAttribute("y", by + 54);
+  t3.setAttribute("x", bx + 14); t3.setAttribute("y", by + 80);
+}
+const copomHide = () => { const g = document.querySelector("#copomChart #cHover"); if (g) g.style.display = "none"; };
+const cChart = document.getElementById("copomChart");
+cChart.addEventListener("pointermove", e => copomShowAt(e.clientX));
+cChart.addEventListener("pointerdown", e => copomShowAt(e.clientX));
+cChart.addEventListener("pointerleave", copomHide);
+cChart.addEventListener("pointerup", e => { if (e.pointerType !== "mouse") setTimeout(copomHide, 1500); });
+
 document.getElementById("histToggle").addEventListener("click", () => { histOpen = !histOpen; renderCopom(); });
 document.getElementById("chips").addEventListener("click", e => {
   const b = e.target.closest(".chip"); if (!b) return;
