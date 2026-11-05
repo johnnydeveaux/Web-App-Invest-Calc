@@ -25,6 +25,7 @@
     --grey: #6b6e75;
     --gold: #f4c247;
     --green: #4caf61;
+    --teal: #2fbfae;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; background: var(--bg); color: var(--text); }
@@ -34,7 +35,12 @@
     -webkit-text-size-adjust: 100%;
   }
   .wrap { max-width: 640px; margin: 0 auto; }
-  header { display: flex; align-items: baseline; gap: 8px; margin: 4px 4px 14px; }
+  header { display: flex; align-items: center; gap: 8px; margin: 4px 4px 14px; }
+  header .ver { flex: 1; }
+  .flag { background: none; border: 0; padding: 4px; cursor: pointer; line-height: 0; border-radius: 8px; }
+  .flag svg { width: 40px; height: 28px; border-radius: 5px; display: block; box-shadow: 0 0 0 1px rgba(255,255,255,.12); }
+  .flag:active { transform: scale(.94); }
+  .flag:focus-visible { outline: 2px solid var(--blue); }
   header h1 { font-size: 17px; font-weight: 600; margin: 0; }
   header .ver { font-size: 13px; color: var(--faint); }
   .card { background: var(--card); border-radius: 26px; overflow: hidden; }
@@ -76,27 +82,48 @@
   input[type=range]::-moz-range-thumb { width: 24px; height: 24px; border-radius: 50%; background: var(--blue); border: 0; }
   input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(74,114,240,.35); }
   .foot { display: flex; justify-content: space-between; align-items: center; margin: 14px 6px 0; font-size: 13px; color: var(--faint); }
+  .copom { margin: 18px 6px 0; font-size: 12px; color: var(--faint); line-height: 1.6; font-variant-numeric: tabular-nums; }
+  .copom .r { display: flex; gap: 12px; }
+  .copom .d { min-width: 110px; }
+  .copom .chg { margin-left: auto; }
+  .copom .up { color: #d98a7a; } .copom .down { color: #7fbf8f; }
+  .copom .bar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin-top: 8px; }
+  .copom .link { background: none; border: 0; padding: 4px 0; font: inherit; color: var(--muted); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+  .copom .link:disabled { opacity: .5; }
+  .copom .link:focus-visible, .copom .chip:focus-visible { outline: 2px solid var(--blue); border-radius: 4px; }
+  .copom .status { width: 100%; font-size: 11px; }
+  .hist { margin-top: 10px; }
+  .hist[hidden] { display: none; }
+  .chips { display: flex; gap: 6px; margin-bottom: 8px; }
+  .chip { background: none; border: 1px solid var(--line); color: var(--faint); border-radius: 12px; padding: 2px 10px; font: inherit; cursor: pointer; }
+  .chip[aria-pressed=true] { border-color: var(--muted); color: var(--text); }
+  #copomChart { width: 100%; height: auto; display: block; margin-bottom: 6px; }
+  #copomChart text { font-size: 18px; fill: var(--faint); }
+  .list { max-height: 190px; overflow-y: auto; border-top: 1px solid var(--line); padding-top: 6px; -webkit-overflow-scrolling: touch; }
+  .list .y { color: var(--muted); margin-top: 6px; }
   .foot button { background: none; border: 0; color: var(--muted); font: inherit; padding: 6px 4px; cursor: pointer; }
   .foot button:focus-visible { outline: 2px solid var(--blue); border-radius: 6px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <header><h1>Invest Calc</h1><span class="ver" id="ver"></span></header>
+  <header><h1>Invest Calc</h1><span class="ver" id="ver"></span><button class="flag" id="lang" type="button"></button></header>
 
   <div class="card">
     <div class="result">
-      <div class="k">Time to reach target goal</div>
+      <div class="k" data-t="timeTo"></div>
       <div class="big" id="years">–</div>
       <div class="sub" id="subtitle"></div>
       <div class="split" id="split"></div>
+      <div class="split" id="selicLine" style="color:var(--teal)"></div>
     </div>
     <hr>
     <div class="chartbox">
       <div class="legend">
-        <span><i class="dot" style="background:var(--blue)"></i>Total balance</span>
-        <span><i class="dot" style="background:var(--grey)"></i>Invested capital</span>
-        <span><i class="dash"></i>Target line</span>
+        <span><i class="dot" style="background:var(--blue)"></i><span data-t="total"></span></span>
+        <span><i class="dot" style="background:var(--grey)"></i><span data-t="invested"></span></span>
+        <span><i class="dot" style="background:var(--teal)"></i><span data-t="selicBal"></span></span>
+        <span><i class="dash"></i><span data-t="targetLine"></span></span>
       </div>
       <svg id="chart" viewBox="0 0 600 300" aria-label="Growth chart"></svg>
     </div>
@@ -105,48 +132,112 @@
   </div>
 
   <div class="foot">
-    <span>Monthly compounding, deposits at month end</span>
-    <button id="reset" type="button">Reset</button>
+    <span data-t="method"></span>
+    <button id="reset" type="button" data-t="reset"></button>
+  </div>
+  <div class="copom">
+    <div id="copomRecent"></div>
+    <div class="bar">
+      <button class="link" id="histToggle" type="button" aria-expanded="false" aria-controls="hist"></button>
+      <button class="link" id="copomUpdate" type="button"></button>
+      <span class="status" id="copomStatus"></span>
+    </div>
+    <div class="hist" id="hist" hidden>
+      <div class="chips" id="chips"></div>
+      <svg id="copomChart" viewBox="0 0 600 170" aria-hidden="true"></svg>
+      <div class="list" id="copomList"></div>
+    </div>
   </div>
 </div>
 
 <script>
-const VERSION = "1.0";
+const VERSION = "2.0";
+// Built-in Copom SELIC decisions (fallback when offline or before first update)
+const COPOM_BUILTIN = [
+  ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
+  ["2024-07-31", 10.50], ["2024-09-18", 10.75], ["2024-11-06", 11.25], ["2024-12-11", 12.25],
+  ["2025-01-29", 13.25], ["2025-03-19", 14.25], ["2025-05-07", 14.75], ["2025-06-18", 15.00],
+  ["2025-07-30", 15.00], ["2025-09-17", 15.00], ["2025-11-05", 15.00], ["2025-12-10", 15.00],
+  ["2026-01-28", 15.00], ["2026-03-18", 14.75], ["2026-04-29", 14.50], ["2026-06-17", 14.25],
+  ["2026-08-05", 14.00], ["2026-09-16", 13.75], ["2026-11-04", 13.75],
+].map(([date, rate]) => ({ date, rate }));
+let copom = { list: COPOM_BUILTIN, updated: null, source: "builtin" };
+try { const c = JSON.parse(localStorage.getItem("investcalc.copom")); if (c && c.list && c.list.length) copom = c; } catch (e) {}
+let histRange = 24, histOpen = false, copomError = false, copomBusy = false;
+
+const FLAG_BR = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#009b3a"/><path d="M20 3.5 36.5 14 20 24.5 3.5 14z" fill="#fedf00"/><circle cx="20" cy="14" r="6.6" fill="#002776"/><path d="M13.6 12.6c4.3-.9 9-.3 12.7 1.9" stroke="#fff" stroke-width="1.3" fill="none"/></svg>';
+const FLAG_US = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#fff"/>' +
+  [0,2,4,6,8,10,12].map(i => `<rect y="${i*28/13}" width="40" height="${28/13}" fill="#b22234"/>`).join("") +
+  '<rect width="17" height="15.1" fill="#3c3b6e"/>' +
+  [[2.5,2.5],[6.5,2.5],[10.5,2.5],[14.5,2.5],[4.5,5.5],[8.5,5.5],[12.5,5.5],[2.5,8.5],[6.5,8.5],[10.5,8.5],[14.5,8.5],[4.5,11.5],[8.5,11.5],[12.5,11.5]].map(([x,y]) => `<circle cx="${x}" cy="${y}" r=".8" fill="#fff"/>`).join("") + '</svg>';
+
+const I18N = {
+  en: {
+    locale: "en-US", timeTo: "Time to reach target goal", years: "years", months: "months",
+    total: "Total balance", invested: "Invested capital", targetLine: "Target line",
+    target: "Target future value", principal: "Starting principal", monthly: "Monthly contribution", rate: "CDI (Interbank Deposit Certificate)", selic: "SELIC (Special Settlement and Custody System)", selicBal: "SELIC balance",
+    selicHit: y => `At SELIC: ${y} years`, selicNever: "At SELIC: 100+ years",
+    method: "Main result uses CDI. Monthly compounding, deposits at month end", reset: "Reset",
+    projected: v => `Projected timeline to grow savings to ${v}.`,
+    split: (c, g, m) => `You put in ${c}, growth adds ${g} (${m} months)`,
+    never: "100+ years", neverSub: v => `This mix won't reach ${v}. Raise the monthly contribution or return rate.`,
+    already: "Already there", alreadySub: v => `Your starting principal already meets ${v}.`,
+    tip: (y, c) => `${y} yrs, ${c} in`, tipSelic: v => `SELIC ${v}`, copomTitle: "Recent Copom meetings (SELIC rate)", current: "current", showHist: "Show history", hideHist: "Hide history", update: "Update rates", updating: "Updating…", held: "held", all: "All", y1: "1 year", y2: "2 years", stBuiltin: d => `Built-in data through ${d}`, stUpdated: d => `Updated ${d} from Banco Central`, stError: "Couldn't reach Banco Central. Showing saved rates.", stNoNew: d => `Already up to date (checked ${d})`, axis: "yrs", switchTo: "Mudar para português", flag: FLAG_BR, htmlLang: "en"
+  },
+  pt: {
+    locale: "pt-BR", timeTo: "Tempo para atingir a meta", years: "anos", months: "meses",
+    total: "Saldo total", invested: "Capital investido", targetLine: "Linha da meta",
+    target: "Valor futuro desejado", principal: "Capital inicial", monthly: "Aporte mensal", rate: "CDI (Certificado de Depósito Interbancário)", selic: "SELIC (Sistema Especial de Liquidação e Custódia)", selicBal: "Saldo pela SELIC",
+    selicHit: y => `Pela SELIC: ${y} anos`, selicNever: "Pela SELIC: 100+ anos",
+    method: "Resultado principal usa o CDI. Juros compostos mensais, aportes no fim do mês", reset: "Redefinir",
+    projected: v => `Prazo projetado para suas economias chegarem a ${v}.`,
+    split: (c, g, m) => `Você investe ${c}, o rendimento soma ${g} (${m} meses)`,
+    never: "100+ anos", neverSub: v => `Com esses valores você não chega a ${v}. Aumente o aporte mensal ou a taxa de retorno.`,
+    already: "Meta já atingida", alreadySub: v => `Seu capital inicial já alcança ${v}.`,
+    tip: (y, c) => `${y} anos, ${c} investidos`, tipSelic: v => `SELIC ${v}`, copomTitle: "Últimas reuniões do Copom (taxa SELIC)", current: "atual", showHist: "Ver histórico", hideHist: "Ocultar histórico", update: "Atualizar taxas", updating: "Atualizando…", held: "manteve", all: "Tudo", y1: "1 ano", y2: "2 anos", stBuiltin: d => `Dados embutidos até ${d}`, stUpdated: d => `Atualizado em ${d} pelo Banco Central`, stError: "Não foi possível acessar o Banco Central. Mostrando taxas salvas.", stNoNew: d => `Já está atualizado (verificado em ${d})`, axis: "anos", switchTo: "Switch to English", flag: FLAG_US, htmlLang: "pt-BR"
+  }
+};
+let lang = localStorage.getItem("investcalc.lang") === "pt" ? "pt" : "en";
+const t = () => I18N[lang];
 document.getElementById("ver").textContent = "v" + VERSION;
 
 const FIELDS = [
   { id: "target",    label: "Target future value",   min: 10000, max: 2000000, step: 10000, def: 1000000, money: true },
   { id: "principal", label: "Starting principal",    min: 0,     max: 500000,  step: 1000,  def: 141000,  money: true },
   { id: "monthly",   label: "Monthly contribution",  min: 0,     max: 30000,   step: 100,   def: 20000,   money: true },
-  { id: "rate",      label: "Annual return rate",    min: 0,     max: 20,      step: 0.1,   def: 13.7,    money: false },
+  { id: "rate",      label: "CDI",                   min: 0,     max: 20,      step: 0.05,  def: 13.7,    money: false },
+  { id: "selic",     label: "SELIC",                 min: 0,     max: 20,      step: 0.05,  def: 13.75,   money: false },
 ];
 const STORE = "investcalc.v1";
 let state = {};
 try { state = JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { state = {}; }
 FIELDS.forEach(f => { if (typeof state[f.id] !== "number" || isNaN(state[f.id])) state[f.id] = f.def; });
 
-const usd = n => "$" + Math.round(n).toLocaleString("en-US");
-const fmt = (f, v) => f.money ? usd(v) : (+v).toFixed(1) + "%";
-const kfmt = n => n >= 1e7 ? "$" + (n / 1e6).toFixed(1) + "M" : "$" + Math.round(n / 1000) + "k";
+const usd = n => "$" + Math.round(n).toLocaleString(t().locale);
+const dec = n => (+n).toLocaleString(t().locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const pct = n => (+n).toLocaleString(t().locale, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + "%";
+const fmt = (f, v) => f.money ? usd(v) : pct(v);
+const kfmt = n => n >= 1e7 ? "$" + dec(n / 1e6) + "M" : "$" + Math.round(n / 1000).toLocaleString(t().locale) + "k";
 
 // Build controls
 const box = document.getElementById("controls");
 FIELDS.forEach(f => {
   const row = document.createElement("div");
   row.className = "row";
-  row.innerHTML = `<label for="r-${f.id}">${f.label}</label>
+  row.innerHTML = `<label for="r-${f.id}" data-t="${f.id}"></label>
     <div class="line">
       <input type="range" id="r-${f.id}" min="${f.min}" max="${Math.max(f.max, state[f.id])}" step="${f.step}">
-      <input class="val" id="v-${f.id}" inputmode="decimal" enterkeyhint="done" aria-label="${f.label} value">
+      <input class="val" id="v-${f.id}" inputmode="decimal" enterkeyhint="done" >
     </div>`;
   box.appendChild(row);
   const r = row.querySelector("input[type=range]");
   const v = row.querySelector(".val");
   r.value = state[f.id];
   r.addEventListener("input", () => { state[f.id] = +r.value; update(); });
-  v.addEventListener("focus", () => { v.value = state[f.id]; v.select(); });
+  v.addEventListener("focus", () => { v.value = f.money ? state[f.id] : pct(state[f.id]).replace("%", ""); v.select(); });
   const commit = () => {
-    const n = parseFloat(String(v.value).replace(/[^0-9.]/g, ""));
+    const raw = String(v.value);
+    const n = f.money ? parseFloat(raw.replace(/[^0-9]/g, "")) : parseFloat(raw.replace(",", ".").replace(/[^0-9.]/g, ""));
     if (!isNaN(n) && n >= 0) {
       state[f.id] = f.money ? Math.round(n) : Math.min(n, 100);
       if (state[f.id] > +r.max) r.max = state[f.id];
@@ -169,19 +260,20 @@ document.getElementById("reset").addEventListener("click", () => {
 
 // Simulation: monthly compounding, contribution at end of each month
 function simulate(months) {
-  const i = state.rate / 100 / 12;
-  let bal = state.principal, cap = state.principal;
-  const pts = [{ m: 0, bal, cap }];
+  const i = state.rate / 100 / 12, j = state.selic / 100 / 12;
+  let bal = state.principal, sel = state.principal, cap = state.principal;
+  const pts = [{ m: 0, bal, sel, cap }];
   for (let m = 1; m <= months; m++) {
     bal = bal * (1 + i) + state.monthly;
+    sel = sel * (1 + j) + state.monthly;
     cap += state.monthly;
-    pts.push({ m, bal, cap });
+    pts.push({ m, bal, sel, cap });
   }
   return pts;
 }
-function monthsToTarget() {
+function monthsToTarget(rate = state.rate) {
   if (state.principal >= state.target) return 0;
-  const i = state.rate / 100 / 12;
+  const i = rate / 100 / 12;
   let bal = state.principal;
   for (let m = 1; m <= 1200; m++) {
     bal = bal * (1 + i) + state.monthly;
@@ -194,10 +286,12 @@ const svg = document.getElementById("chart");
 const W = 600, H = 300, L = 72, R = 18, T = 14, B = 34;
 let lastPts = [], lastMax = 1, lastSpan = 1;
 
-function draw(hit) {
-  const span = hit === null ? 360 : Math.max(12, Math.round((hit || 1) * 1.7));
+function draw(hit, hitS) {
+  const hits = [hit, hitS].filter(h => h !== null);
+  const span = hits.length ? Math.max(12, Math.round((Math.max(...hits) || 1) * 1.7)) : 360;
   const pts = simulate(span);
-  const maxY = Math.max(state.target, pts[pts.length - 1].bal) || 1;
+  const last = pts[pts.length - 1];
+  const maxY = Math.max(state.target, last.bal, last.sel) || 1;
   lastPts = pts; lastMax = maxY; lastSpan = span;
   const x = m => L + (m / span) * (W - L - R);
   const y = v => T + (1 - v / maxY) * (H - T - B);
@@ -210,14 +304,16 @@ function draw(hit) {
   }
   for (let k = 0; k <= 5; k++) {
     const m = span * k / 5;
-    s += `<text x="${x(m)}" y="${H - 10}" text-anchor="middle">${(m / 12).toFixed(1)} yrs</text>`;
+    s += `<text x="${k === 5 ? W - R : x(m)}" y="${H - 10}" text-anchor="${k === 5 ? "end" : "middle"}">${dec(m / 12)} ${t().axis}</text>`;
   }
   const path = key => pts.map((p, n) => (n ? "L" : "M") + x(p.m).toFixed(1) + "," + y(p[key]).toFixed(1)).join("");
   s += `<line x1="${L}" x2="${W - R}" y1="${y(state.target)}" y2="${y(state.target)}" stroke="var(--gold)" stroke-width="2" stroke-dasharray="7 6"/>`;
   s += `<path d="${path("cap")}" fill="none" stroke="var(--grey)" stroke-width="2.5"/>`;
+  s += `<path d="${path("sel")}" fill="none" stroke="var(--teal)" stroke-width="2.5" stroke-linecap="round"/>`;
   s += `<path d="${path("bal")}" fill="none" stroke="var(--blue)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (hitS !== null) s += `<circle cx="${x(hitS)}" cy="${y(state.target)}" r="5" fill="var(--teal)"/>`;
   if (hit !== null) s += `<circle cx="${x(hit)}" cy="${y(state.target)}" r="7" fill="var(--green)"/>`;
-  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--blue)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="40" fill="#1b1d22" stroke="#3a3d45"/><text id="ht1" style="fill:#e8eaed;font-size:13px"></text><text id="ht2" style="font-size:12px"></text></g>`;
+  s += `<g id="hover" style="display:none"><line id="hl" y1="${T}" y2="${H - B}" stroke="#8a8f99" stroke-width="1"/><circle id="hc" r="5" fill="var(--blue)" stroke="#fff" stroke-width="2"/><rect id="hr" rx="8" height="56" fill="#1b1d22" stroke="#3a3d45"/><text id="ht1" style="fill:#e8eaed;font-size:13px"></text><text id="ht2" style="font-size:12px"></text><text id="ht3" style="font-size:12px;fill:var(--teal)"></text></g>`;
   svg.innerHTML = s;
 }
 
@@ -232,16 +328,144 @@ function showAt(clientX) {
   const g = svg.querySelector("#hover"); g.style.display = "";
   svg.querySelector("#hl").setAttribute("x1", x); svg.querySelector("#hl").setAttribute("x2", x);
   const c = svg.querySelector("#hc"); c.setAttribute("cx", x); c.setAttribute("cy", y);
-  const bw = 150, bx = x + bw + 12 > W ? x - bw - 10 : x + 10;
+  const bw = 170, bx = x + bw + 12 > W ? x - bw - 10 : x + 10;
   const rr = svg.querySelector("#hr"); rr.setAttribute("x", bx); rr.setAttribute("y", T); rr.setAttribute("width", bw);
   const t1 = svg.querySelector("#ht1"); t1.setAttribute("x", bx + 10); t1.setAttribute("y", T + 17); t1.textContent = usd(p.bal);
-  const t2 = svg.querySelector("#ht2"); t2.setAttribute("x", bx + 10); t2.setAttribute("y", T + 33); t2.textContent = (m / 12).toFixed(1) + " yrs, " + usd(p.cap) + " in";
+  const t2 = svg.querySelector("#ht2"); t2.setAttribute("x", bx + 10); t2.setAttribute("y", T + 33); t2.textContent = t().tip(dec(m / 12), usd(p.cap));
+  const t3 = svg.querySelector("#ht3"); t3.setAttribute("x", bx + 10); t3.setAttribute("y", T + 49); t3.textContent = t().tipSelic(usd(p.sel));
 }
 const hide = () => { const g = svg.querySelector("#hover"); if (g) g.style.display = "none"; };
 svg.addEventListener("pointermove", e => showAt(e.clientX));
 svg.addEventListener("pointerdown", e => showAt(e.clientX));
 svg.addEventListener("pointerleave", hide);
 svg.addEventListener("pointerup", e => { if (e.pointerType !== "mouse") setTimeout(hide, 1500); });
+
+function applyLang() {
+  document.documentElement.lang = t().htmlLang;
+  document.querySelectorAll("[data-t]").forEach(el => { el.textContent = t()[el.dataset.t]; });
+  FIELDS.forEach(f => document.getElementById("v-" + f.id).setAttribute("aria-label", t()[f.id]));
+  renderCopom();
+  const b = document.getElementById("lang");
+  b.innerHTML = t().flag; b.setAttribute("aria-label", t().switchTo); b.title = t().switchTo;
+}
+document.getElementById("lang").addEventListener("click", () => {
+  lang = lang === "en" ? "pt" : "en";
+  try { localStorage.setItem("investcalc.lang", lang); } catch (e) {}
+  applyLang(); update();
+});
+
+const fdate = iso => new Date(iso + "T12:00:00Z").toLocaleDateString(t().locale, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+const frate = r => r.toLocaleString(t().locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+function changeTag(list, n) {
+  const prev = list[n + 1];
+  if (!prev) return "";
+  const d = Math.round((list[n].rate - prev.rate) * 100) / 100;
+  if (d === 0) return `<span class="chg">${t().held}</span>`;
+  const v = Math.abs(d).toLocaleString(t().locale, { minimumFractionDigits: 2 });
+  return d > 0 ? `<span class="chg up">▲ ${v}</span>` : `<span class="chg down">▼ ${v}</span>`;
+}
+function renderCopom() {
+  const desc = [...copom.list].sort((a, b) => b.date.localeCompare(a.date));
+  document.getElementById("copomRecent").innerHTML = `<div>${t().copomTitle}</div>` + desc.slice(0, 3).map((c, n) =>
+    `<div class="r"><span class="d">${fdate(c.date)}</span><span>${frate(c.rate)}${n === 0 ? " (" + t().current + ")" : ""}</span>${changeTag(desc, n)}</div>`).join("");
+
+  const tg = document.getElementById("histToggle");
+  tg.textContent = histOpen ? t().hideHist : t().showHist;
+  tg.setAttribute("aria-expanded", histOpen);
+  document.getElementById("hist").hidden = !histOpen;
+  const ub = document.getElementById("copomUpdate");
+  ub.textContent = copomBusy ? t().updating : t().update; ub.disabled = copomBusy;
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById("copomStatus").textContent = copomError ? t().stError
+    : copom.source === "builtin" ? t().stBuiltin(fdate(desc[0].date))
+    : copom.noNew ? t().stNoNew(fdate(copom.updated)) : t().stUpdated(fdate(copom.updated));
+  if (!histOpen) return;
+
+  document.getElementById("chips").innerHTML = [[12, t().y1], [24, t().y2], [0, t().all]].map(([v, l]) =>
+    `<button class="chip" type="button" data-r="${v}" aria-pressed="${histRange === v}">${l}</button>`).join("");
+  const cutoff = histRange ? new Date(Date.now() - histRange * 30.44 * 864e5).toISOString().slice(0, 10) : "0000";
+  const inRange = desc.filter(c => c.date >= cutoff);
+  const asc = [...inRange].reverse();
+
+  // Step chart
+  const cw = 600, ch = 170, l = 70, r = 12, tp = 12, bt = 30;
+  const t0 = Date.parse(asc[0].date), t1 = Date.parse(today) || Date.parse(asc[asc.length - 1].date);
+  const rates = asc.map(c => c.rate);
+  let lo = Math.floor(Math.min(...rates)) , hi = Math.ceil(Math.max(...rates));
+  if (hi - lo < 1) { lo -= 0.5; hi += 0.5; }
+  const X = d => l + (Date.parse(d) - t0) / Math.max(1, t1 - t0) * (cw - l - r);
+  const Y = v => tp + (1 - (v - lo) / (hi - lo)) * (ch - tp - bt);
+  let g = "";
+  [lo, (lo + hi) / 2, hi].forEach(v => {
+    g += `<line x1="${l}" x2="${cw - r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#30333b"/>`;
+    g += `<text x="${l - 8}" y="${Y(v) + 6}" text-anchor="end">${frate(v)}</text>`;
+  });
+  let d = "";
+  asc.forEach((c, n) => { d += (n ? `H${X(c.date).toFixed(1)}V` : `M${X(c.date).toFixed(1)},`) + Y(c.rate).toFixed(1); });
+  d += `H${cw - r}`;
+  g += `<path d="${d}" fill="none" stroke="var(--teal)" stroke-width="3"/>`;
+  asc.forEach(c => g += `<circle cx="${X(c.date)}" cy="${Y(c.rate)}" r="3.5" fill="var(--teal)"/>`);
+  const y0 = new Date(asc[0].date).getUTCFullYear(), y1 = new Date(today).getUTCFullYear();
+  for (let y = y0 + 1; y <= y1; y++) {
+    const xx = X(y + "-01-01");
+    g += `<line x1="${xx}" x2="${xx}" y1="${tp}" y2="${ch - bt}" stroke="#30333b" stroke-dasharray="3 4"/><text x="${xx}" y="${ch - 6}" text-anchor="middle">${y}</text>`;
+  }
+  document.getElementById("copomChart").innerHTML = g;
+
+  // List grouped by year
+  let html = "", yr = "";
+  inRange.forEach(c => {
+    const y = c.date.slice(0, 4);
+    if (y !== yr) { html += `<div class="y">${y}</div>`; yr = y; }
+    html += `<div class="r"><span class="d">${fdate(c.date)}</span><span>${frate(c.rate)}</span>${changeTag(desc, desc.indexOf(c))}</div>`;
+  });
+  document.getElementById("copomList").innerHTML = html;
+}
+document.getElementById("histToggle").addEventListener("click", () => { histOpen = !histOpen; renderCopom(); });
+document.getElementById("chips").addEventListener("click", e => {
+  const b = e.target.closest(".chip"); if (!b) return;
+  histRange = +b.dataset.r; renderCopom();
+});
+
+// Manual update from Banco Central
+async function fetchCopomHistory() {
+  // 1) Copom decision history (includes meetings where the rate was held)
+  try {
+    const r = await fetch("https://www.bcb.gov.br/api/servico/sitebcb/historicotaxasjuros", { cache: "no-store" });
+    const j = await r.json();
+    const rows = (j.conteudo || j.value || j).map(x => {
+      const dateRaw = x.DataReuniaoCopom || x.dataReuniaoCopom || x.DataReuniao || x.dataReuniao;
+      const rate = parseFloat(String(x.MetaSelic ?? x.metaSelic ?? x.TaxaSelic ?? "").replace(",", "."));
+      return { date: String(dateRaw || "").slice(0, 10), rate };
+    }).filter(x => /^\d{4}-\d{2}-\d{2}$/.test(x.date) && !isNaN(x.rate));
+    if (rows.length > 5) return rows;
+  } catch (e) {}
+  // 2) Daily SELIC target series (SGS 432): only shows changes, so merge new ones into what we have
+  const end = new Date(), start = new Date(Date.now() - 4 * 365 * 864e5);
+  const br = d => d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+  const r = await fetch(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados?formato=json&dataInicial=${br(start)}&dataFinal=${br(end)}`, { cache: "no-store" });
+  const j = await r.json();
+  const last = [...copom.list].sort((a, b) => b.date.localeCompare(a.date))[0];
+  const merged = [...copom.list];
+  let prev = null;
+  j.forEach(x => {
+    const [dd, mm, yy] = x.data.split("/"); const date = `${yy}-${mm}-${dd}`; const rate = parseFloat(x.valor);
+    if (prev !== null && rate !== prev && date > last.date) merged.push({ date, rate });
+    prev = rate;
+  });
+  return merged;
+}
+document.getElementById("copomUpdate").addEventListener("click", async () => {
+  copomBusy = true; copomError = false; renderCopom();
+  try {
+    const list = await fetchCopomHistory();
+    const latest = l => [...l].sort((a, b) => b.date.localeCompare(a.date))[0].date;
+    const noNew = latest(list) === latest(copom.list);
+    copom = { list, updated: new Date().toISOString().slice(0, 10), source: "bcb", noNew };
+    try { localStorage.setItem("investcalc.copom", JSON.stringify(copom)); } catch (e) {}
+  } catch (e) { copomError = true; }
+  copomBusy = false; renderCopom();
+});
 
 function update() {
   FIELDS.forEach(f => {
@@ -255,22 +479,26 @@ function update() {
   const sub = document.getElementById("subtitle");
   const split = document.getElementById("split");
   if (hit === null) {
-    yearsEl.textContent = "100+ years";
-    sub.textContent = "This mix won't reach " + usd(state.target) + ". Raise the monthly contribution or return rate.";
+    yearsEl.textContent = t().never;
+    sub.textContent = t().neverSub(usd(state.target));
     split.textContent = "";
   } else if (hit === 0) {
-    yearsEl.textContent = "Already there";
-    sub.textContent = "Your starting principal already meets " + usd(state.target) + ".";
+    yearsEl.textContent = t().already;
+    sub.textContent = t().alreadySub(usd(state.target));
     split.textContent = "";
   } else {
-    yearsEl.textContent = (hit / 12).toFixed(1) + " years";
-    sub.textContent = "Projected timeline to grow savings to " + usd(state.target) + ".";
+    yearsEl.textContent = dec(hit / 12) + " " + t().years;
+    sub.textContent = t().projected(usd(state.target));
     const p = simulate(hit)[hit];
-    split.textContent = "You put in " + usd(p.cap) + ", growth adds " + usd(p.bal - p.cap) + " (" + hit + " months)";
+    split.textContent = t().split(usd(p.cap), usd(p.bal - p.cap), hit);
   }
-  draw(hit);
+  const hitS = monthsToTarget(state.selic);
+  const sl = document.getElementById("selicLine");
+  sl.textContent = hit === 0 ? "" : hitS === null ? t().selicNever : t().selicHit(dec(hitS / 12));
+  draw(hit, hitS);
   try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) {}
 }
+applyLang();
 update();
 
 if ("serviceWorker" in navigator) {
