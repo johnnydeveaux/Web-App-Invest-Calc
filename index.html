@@ -66,6 +66,20 @@
   .gloss td { padding: 8px 0; border-top: 1px solid var(--line); vertical-align: top; }
   .gloss td:first-child { width: 64px; color: var(--muted); font-weight: 600; padding-right: 10px; }
   .gloss b { color: var(--muted); font-weight: 500; }
+  .income { padding: 20px 24px 22px; }
+  .income .tlabel { margin-bottom: 2px; }
+  .inc-sub { font-size: 13px; color: var(--faint); }
+  .inc-big { margin: 10px 0 12px; font-size: 30px; font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; letter-spacing: -0.3px; }
+  .inc-per { font-size: 16px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+  .inc-big.neg { font-size: 17px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  .inc-slider { margin-top: 4px; }
+  .inc-sl-head { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  #incMarginVal { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #incRange { width: 100%; }
+  .inc-rows { margin-top: 12px; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .inc-rows div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
+  .inc-rows div span:last-child { color: var(--text); white-space: nowrap; }
+  .income .hint { margin-top: 8px; line-height: 1.45; }
   .taxrow { padding: 0 24px 24px; margin-top: -8px; }
   .taxrow .lbl { font-size: 16px; font-weight: 500; margin-bottom: 10px; }
   .seg { display: flex; background: var(--bg); border-radius: 12px; padding: 3px; gap: 3px; }
@@ -148,6 +162,23 @@
       <svg id="chart" viewBox="0 0 600 300" aria-label="Growth chart"></svg>
     </div>
     <hr>
+    <div class="income">
+      <div class="inc-head">
+        <div class="tlabel" data-t="incTitle"></div>
+        <div class="inc-sub" id="incSub"></div>
+      </div>
+      <div class="inc-big"><span id="incAmt"></span><span class="inc-per" data-t="perMonth"></span></div>
+      <div class="inc-slider">
+        <div class="inc-sl-head"><span data-t="incMargin"></span><span id="incMarginVal"></span></div>
+        <input type="range" id="incRange" min="0" max="5" step="0.1">
+      </div>
+      <div class="inc-rows">
+        <div><span data-t="incNet"></span><span id="incNet"></span></div>
+        <div><span id="incKeepLbl"></span><span id="incKeep"></span></div>
+      </div>
+      <div class="hint" id="incNote"></div>
+    </div>
+    <hr>
     <div class="controls" id="controls"></div>
     <div class="taxrow">
       <div class="lbl" data-t="taxTitle"></div>
@@ -180,7 +211,7 @@
 </div>
 
 <script>
-const VERSION = "7.0";
+const VERSION = "8.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -195,6 +226,10 @@ try { const c = JSON.parse(localStorage.getItem("investcalc.copom")); if (c && c
 // CDI rate (annual, base 252). Built-in value; "Update rates" refreshes it from Banco Central (SGS 4389)
 const CDI_BUILTIN = { rate: 13.65, date: "2026-11-04" };
 let cdiBase = CDI_BUILTIN;
+// IPCA (official inflation), 12-month total. Built-in value; "Update rates" refreshes it (SGS 13522)
+const IPCA_BUILTIN = { rate: 4.58, date: "2026-09-01" };
+let ipcaBase = IPCA_BUILTIN;
+try { const c = JSON.parse(localStorage.getItem("investcalc.ipca")); if (c && typeof c.rate === "number") ipcaBase = c; } catch (e) {}
 try { const c = JSON.parse(localStorage.getItem("investcalc.cdi")); if (c && typeof c.rate === "number") cdiBase = c; } catch (e) {}
 // "% of CDI" is applied to the daily CDI rate, then compounded over 252 business days (how Brazilian banks calculate it)
 function effRate() {
@@ -225,10 +260,19 @@ const I18N = {
       ["LCA", "Letra de Crédito do Agronegócio", "Bank bond that funds agribusiness. Tax-free for individuals."],
       ["IR", "Imposto de Renda", "Income tax on gains: 22.5% up to 6 months, down to 15% after 2 years."],
       ["FGC", "Fundo Garantidor de Créditos", "Protects up to R$250,000 per person per bank if the bank fails. Covers CDB, RDB, LCI and LCA."],
+      ["IPCA", "Índice Nacional de Preços ao Consumidor Amplo", "Brazil's official inflation rate, measured by IBGE."],
       ["a.a.", "ao ano", "Per year. 13.75% a.a. means 13.75% a year."],
     ],
     taxHint: { none: "Showing gross returns, before income tax.", cdb: "Your CDB/RDB and SELIC pay IR on the gains: 22.5% up to 6 months, 20% up to 1 year, 17.5% up to 2 years, 15% after that. Each monthly deposit counts its own time.", lci: "Your CDI investment is tax-free. SELIC (Tesouro Selic) still pays IR on the gains: 22.5% down to 15% after 2 years." },
     splitTax: (c, g, x, m) => `You put in ${c}, growth adds ${g} after ${x} in tax`,
+    incTitle: "Sustainable monthly withdrawal", perMonth: "/ month",
+    incSub: v => `Living off the interest once you reach ${v}`,
+    incMargin: "Margin above inflation", incMarginVal: r => r ? `+${r}% a year` : "Inflation only (keep value)",
+    incNet: "Interest earned after tax", incKeep: (p, r) => `Reinvest to beat inflation (IPCA ${p}${r ? " + " + r + "%" : ""})`,
+    incNeg: "Your return after tax doesn't beat inflation at this level. Raise the % of CDI or pick a lower margin.",
+    incNote: { none: "Before income tax.", cdb: "Uses the 15% income tax rate (money invested 2+ years).", lci: "LCI/LCA interest is tax-free." },
+    incKeepMsg: r => r ? `Your money keeps growing ${r}% a year above inflation while you withdraw.` : "Your money keeps its buying power while you withdraw.",
+    stIpca: (c, d) => `IPCA ${c} (12 months to ${d})`,
     cdiPct: "CDI (Interbank Deposit Certificate)", ofCdi: n => `${n}% of CDI`, cdiHint: (c, d, e) => `CDI ${c} a year (${d}), your return ${e} a year`, stCdi: (c, d) => `CDI ${c} on ${d}`, selic: "SELIC (Special Settlement and Custody System)", selicBal: "SELIC",
     selicHit: y => `At SELIC: ${y}`,
     dur: (y, m) => [y ? (y === 1 ? "1 year" : `${y} years`) : "", m ? (m === 1 ? "1 month" : `${m} months`) : ""].filter(Boolean).join(" "), selicNever: "At SELIC: 100+ years",
@@ -254,10 +298,19 @@ const I18N = {
       ["LCA", "Letra de Crédito do Agronegócio", "Título de banco que financia o agronegócio. Isento de IR para pessoa física."],
       ["IR", "Imposto de Renda", "Imposto sobre o rendimento: 22,5% até 6 meses, caindo para 15% após 2 anos."],
       ["FGC", "Fundo Garantidor de Créditos", "Protege até R$ 250 mil por CPF por banco se o banco quebrar. Cobre CDB, RDB, LCI e LCA."],
+      ["IPCA", "Índice Nacional de Preços ao Consumidor Amplo", "Inflação oficial do Brasil, medida pelo IBGE."],
       ["a.a.", "ao ano", "Por ano. 13,75% a.a. significa 13,75% ao ano."],
     ],
     taxHint: { none: "Mostrando rendimento bruto, antes do Imposto de Renda.", cdb: "Seu CDB/RDB e a SELIC pagam IR sobre o rendimento: 22,5% até 6 meses, 20% até 1 ano, 17,5% até 2 anos e 15% depois disso. Cada aporte mensal conta o próprio prazo.", lci: "Seu investimento CDI é isento. A SELIC (Tesouro Selic) continua pagando IR sobre o rendimento: de 22,5% até 15% após 2 anos." },
     splitTax: (c, g, x, m) => `Você investe ${c}, o rendimento soma ${g} já descontados ${x} de IR`,
+    incTitle: "Retirada mensal sustentável", perMonth: "/ mês",
+    incSub: v => `Vivendo de juros ao atingir ${v}`,
+    incMargin: "Margem acima da inflação", incMarginVal: r => r ? `+${r}% a.a.` : "Só inflação (manter valor)",
+    incNet: "Rendimento após IR", incKeep: (p, r) => `Reinvestir contra a inflação (IPCA ${p}${r ? " + " + r + "%" : ""})`,
+    incNeg: "Com esse rendimento após IR, não sobra nada acima da inflação. Aumente o % do CDI ou escolha uma margem menor.",
+    incNote: { none: "Antes do Imposto de Renda.", cdb: "Considera IR de 15% (dinheiro aplicado há mais de 2 anos).", lci: "Rendimento de LCI/LCA é isento de IR." },
+    incKeepMsg: r => r ? `Seu dinheiro continua crescendo ${r}% ao ano acima da inflação enquanto você saca.` : "Seu dinheiro mantém o poder de compra enquanto você saca.",
+    stIpca: (c, d) => `IPCA ${c} (12 meses até ${d})`,
     cdiPct: "CDI (Certificado de Depósito Interbancário)", ofCdi: n => `${n}% do CDI`, cdiHint: (c, d, e) => `CDI ${c} a.a. (${d}), seu rendimento ${e} a.a.`, stCdi: (c, d) => `CDI ${c} em ${d}`, selic: "SELIC (Sistema Especial de Liquidação e Custódia)", selicBal: "SELIC",
     selicHit: y => `Pela SELIC: ${y}`,
     dur: (y, m) => [y ? (y === 1 ? "1 ano" : `${y} anos`) : "", m ? (m === 1 ? "1 mês" : `${m} meses`) : ""].filter(Boolean).join(" e "), selicNever: "Pela SELIC: 100+ anos",
@@ -285,6 +338,7 @@ let state = {};
 try { state = JSON.parse(localStorage.getItem(STORE)) || {}; } catch (e) { state = {}; }
 FIELDS.forEach(f => { if (typeof state[f.id] !== "number" || isNaN(state[f.id])) state[f.id] = f.def; });
 if (!["none", "cdb", "lci"].includes(state.tax)) state.tax = "none";
+if (typeof state.real !== "number" || isNaN(state.real) || state.real < 0 || state.real > 5) state.real = 1;
 
 const usd = n => "$" + Math.round(n).toLocaleString(t().locale);
 const dec = n => (+n).toLocaleString(t().locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -322,6 +376,9 @@ FIELDS.forEach(f => {
   v.addEventListener("keydown", e => { if (e.key === "Enter") v.blur(); });
 });
 
+document.getElementById("incRange").addEventListener("input", e => {
+  state.real = Math.round(+e.target.value * 10) / 10; update();
+});
 document.getElementById("taxSeg").addEventListener("click", e => {
   const b = e.target.closest("button"); if (!b) return;
   state.tax = b.dataset.v; update();
@@ -332,7 +389,7 @@ document.getElementById("reset").addEventListener("click", () => {
     const r = document.getElementById("r-" + f.id);
     r.max = f.max; r.value = f.def;
   });
-  state.tax = "none";
+  state.tax = "none"; state.real = 1;
   update();
 });
 
@@ -472,7 +529,7 @@ function renderCopom() {
   document.getElementById("copomStatus").textContent = copomError ? t().stError
     : copom.source === "builtin" ? t().stBuiltin(fdate(desc[0].date))
     : copom.noNew ? t().stNoNew(fdate(copom.updated)) : t().stUpdated(fdate(copom.updated));
-  if (!copomError) document.getElementById("copomStatus").textContent += ". " + t().stCdi(pct(cdiBase.rate), fdate(cdiBase.date));
+  if (!copomError) document.getElementById("copomStatus").textContent += ". " + t().stCdi(pct(cdiBase.rate), fdate(cdiBase.date)) + ". " + t().stIpca(pct(ipcaBase.rate), new Date(ipcaBase.date + "T12:00:00Z").toLocaleDateString(t().locale, { month: "short", year: "numeric", timeZone: "UTC" }));
   if (!histOpen) return;
 
   // One chip per year of data available: 1 year, 2 years ... up to all of it
@@ -589,6 +646,19 @@ document.getElementById("copomUpdate").addEventListener("click", async () => {
     }
   } catch (e) {}
   try {
+    const end = new Date(), start = new Date(Date.now() - 120 * 864e5);
+    const br = d => d.toLocaleDateString("pt-BR", { timeZone: "UTC" });
+    const r = await fetch(`https://api.bcb.gov.br/dados/serie/bcdata.sgs.13522/dados?formato=json&dataInicial=${br(start)}&dataFinal=${br(end)}`, { cache: "no-store" });
+    const j = await r.json(); const last = j[j.length - 1];
+    const [dd, mm, yy] = last.data.split("/");
+    const rate = parseFloat(String(last.valor).replace(",", "."));
+    if (!isNaN(rate)) {
+      ipcaBase = { rate, date: `${yy}-${mm}-${dd}` };
+      try { localStorage.setItem("investcalc.ipca", JSON.stringify(ipcaBase)); } catch (e) {}
+      gotSomething = true;
+    }
+  } catch (e) {}
+  try {
     const list = await fetchCopomHistory();
     const latest = l => [...l].sort((a, b) => b.date.localeCompare(a.date))[0].date;
     const noNew = latest(list) === latest(copom.list);
@@ -601,6 +671,30 @@ document.getElementById("copomUpdate").addEventListener("click", async () => {
 // Months as "7 months" or "1 year 3 months"
 const fdur = months => t().dur(Math.floor(months / 12), months % 12);
 
+// Monthly amount you can take out while the balance still grows with inflation (+ optional margin)
+function renderIncome() {
+  const B = state.target;
+  const iGross = Math.pow(1 + effRate() / 100, 1 / 12) - 1;
+  const tax = state.tax === "cdb" ? 0.15 : 0;
+  const net = B * iGross * (1 - tax);
+  const keep = B * (Math.pow((1 + ipcaBase.rate / 100) * (1 + state.real / 100), 1 / 12) - 1);
+  const can = Math.round(net) - Math.round(keep); // same rounding as the rows shown
+  document.getElementById("incSub").textContent = t().incSub(usd(B));
+  const rr = document.getElementById("incRange");
+  if (document.activeElement !== rr) rr.value = state.real;
+  rr.style.setProperty("--p", (state.real / 5 * 100) + "%");
+  const rTxt = state.real.toLocaleString(t().locale, { maximumFractionDigits: 1 });
+  document.getElementById("incMarginVal").textContent = t().incMarginVal(state.real ? rTxt : 0);
+  const big = document.getElementById("incAmt").parentElement;
+  big.classList.toggle("neg", can <= 0);
+  document.getElementById("incAmt").textContent = can > 0 ? usd(can) : t().incNeg;
+  big.querySelector(".inc-per").style.display = can > 0 ? "" : "none";
+  document.getElementById("incNet").textContent = usd(net);
+  document.getElementById("incKeepLbl").textContent = t().incKeep(pct(ipcaBase.rate), state.real ? rTxt : 0);
+  document.getElementById("incKeep").textContent = "− " + usd(keep);
+  document.getElementById("incNote").textContent = t().incNote[state.tax] + " " + t().incKeepMsg(state.real ? rTxt : 0);
+}
+
 function update() {
   FIELDS.forEach(f => {
     const r = document.getElementById("r-" + f.id);
@@ -612,6 +706,7 @@ function update() {
     `<button type="button" role="radio" data-v="${v}" aria-checked="${state.tax === v}">${l}<small>${sm}</small></button>`).join("");
   document.getElementById("taxHint").textContent = t().taxHint[state.tax];
   document.getElementById("totalLbl").textContent = t().total[state.tax](Math.round(state.cdiPct));
+  renderIncome();
   const h = document.getElementById("cdiHint");
   if (h) h.textContent = t().cdiHint(pct(cdiBase.rate), fdate(cdiBase.date), pct(Math.round(effRate() * 100) / 100));
   const hit = monthsToTarget();
