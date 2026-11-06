@@ -99,6 +99,19 @@
   .inc-rows div { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; }
   .inc-rows div span:last-child { color: var(--text); white-space: nowrap; }
   .income .hint { margin-top: 8px; line-height: 1.45; }
+  .fx { margin-top: 14px; }
+  .fx-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin-top: 8px; background: #1f2229; border: 1px solid var(--line); border-radius: 12px; }
+  .fx-main { flex: 1; min-width: 0; }
+  .fx-amt { font-size: 20px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+  .fx-amt small { font-size: 13px; font-weight: 500; color: var(--muted); margin-left: 4px; }
+  .fx-rate { font-size: 12px; color: var(--faint); font-variant-numeric: tabular-nums; }
+  .fx-flag { position: relative; display: flex; align-items: center; gap: 4px; flex: none; cursor: pointer; }
+  .fx-flag svg { width: 36px; height: 25px; border-radius: 4px; box-shadow: 0 0 0 1px rgba(255,255,255,.12); display: block; }
+  .fx-flag .code { font-size: 12px; color: var(--muted); font-weight: 600; }
+  .fx-flag select { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; cursor: pointer; font-size: 16px; }
+  .fx-btn { flex: none; width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--line); background: none; color: var(--green); font-size: 22px; line-height: 1; cursor: pointer; display: grid; place-content: center; }
+  .fx-btn.rm { color: var(--faint); font-size: 20px; }
+  .fx-btn:focus-visible, .fx-flag:focus-within { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 8px; }
   .taxrow { padding: 0 24px 24px; margin-top: -8px; }
   .taxrow .lbl { font-size: 16px; font-weight: 500; margin-bottom: 10px; }
   .seg { display: flex; background: var(--bg); border-radius: 12px; padding: 3px; gap: 3px; }
@@ -189,6 +202,7 @@
         <div><span id="incKeepLbl"></span><span id="incKeep"></span></div>
       </div>
       <div class="hint" id="incNote"></div>
+      <div class="fx" id="fx"></div>
     </div>
     <hr>
     <div class="controls" id="controls"></div>
@@ -223,7 +237,7 @@
 </div>
 
 <script>
-const VERSION = "11.0";
+const VERSION = "12.0";
 // Built-in Copom SELIC decisions (fallback when offline or before first update)
 const COPOM_BUILTIN = [
   ["2024-01-31", 11.25], ["2024-03-20", 10.75], ["2024-05-08", 10.50], ["2024-06-19", 10.50],
@@ -255,11 +269,22 @@ let copomView = null;
 let histRange = 24, histOpen = false, copomError = false, copomBusy = false;
 
 const FLAG_BR = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#009b3a"/><path d="M20 3.5 36.5 14 20 24.5 3.5 14z" fill="#fedf00"/><circle cx="20" cy="14" r="6.6" fill="#002776"/><path d="M13.6 12.6c4.3-.9 9-.3 12.7 1.9" stroke="#fff" stroke-width="1.3" fill="none"/></svg>';
+// Currencies for the withdrawal conversion. BRL per 1 unit (built-in estimate; "Update rates" refreshes from frankfurter.app)
+const FX_BUILTIN = { date: "2026-10-30", brlPer: { USD: 5.44, EUR: 6.19, GBP: 7.24, CNY: 0.77, JPY: 0.0358, CAD: 3.94 } };
+let fxBase = FX_BUILTIN;
+try { const c = JSON.parse(localStorage.getItem("investcalc.fx")); if (c && c.brlPer && c.brlPer.USD) fxBase = c; } catch (e) {}
+const FX_SYM = { USD: "US$", EUR: "€", GBP: "£", CNY: "¥", JPY: "JP¥", CAD: "CA$" };
+const FLAG_EU = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#003399"/>' + Array.from({ length: 12 }, (_, k) => { const a = k / 12 * 2 * Math.PI; return `<circle cx="${(20 + 8 * Math.sin(a)).toFixed(2)}" cy="${(14 - 8 * Math.cos(a)).toFixed(2)}" r="1.2" fill="#ffcc00"/>`; }).join("") + '</svg>';
+const FLAG_GB = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#012169"/><path d="M0 0L40 28M40 0L0 28" stroke="#fff" stroke-width="5"/><path d="M0 0L40 28M40 0L0 28" stroke="#c8102e" stroke-width="2"/><path d="M20 0V28M0 14H40" stroke="#fff" stroke-width="8"/><path d="M20 0V28M0 14H40" stroke="#c8102e" stroke-width="4.5"/></svg>';
+const FLAG_CN = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#de2910"/><polygon points="8,3 9.4,7.2 13.8,7.2 10.2,9.8 11.6,14 8,11.4 4.4,14 5.8,9.8 2.2,7.2 6.6,7.2" fill="#ffde00"/>' + [[15,3],[17.5,5.5],[17.5,9],[15,11.5]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.1" fill="#ffde00"/>`).join("") + '</svg>';
+const FLAG_JP = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#fff"/><circle cx="20" cy="14" r="8" fill="#bc002d"/></svg>';
+const FLAG_CA = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#fff"/><rect width="10" height="28" fill="#d52b1e"/><rect x="30" width="10" height="28" fill="#d52b1e"/><path d="M20 6l1.6 3.2 2-.8-.8 4.4 2.6-2-.4 2.2 2.4.6-2.8 2.6.6 1.6-4.2-.6.2 4.2h-2.4l.2-4.2-4.2.6.6-1.6-2.8-2.6 2.4-.6-.4-2.2 2.6 2-.8-4.4 2 .8z" fill="#d52b1e"/></svg>';
 const FLAG_US = '<svg viewBox="0 0 40 28" aria-hidden="true"><rect width="40" height="28" fill="#fff"/>' +
   [0,2,4,6,8,10,12].map(i => `<rect y="${i*28/13}" width="40" height="${28/13}" fill="#b22234"/>`).join("") +
   '<rect width="17" height="15.1" fill="#3c3b6e"/>' +
   [[2.5,2.5],[6.5,2.5],[10.5,2.5],[14.5,2.5],[4.5,5.5],[8.5,5.5],[12.5,5.5],[2.5,8.5],[6.5,8.5],[10.5,8.5],[14.5,8.5],[4.5,11.5],[8.5,11.5],[12.5,11.5]].map(([x,y]) => `<circle cx="${x}" cy="${y}" r=".8" fill="#fff"/>`).join("") + '</svg>';
 
+const FX_FLAG = () => ({ USD: FLAG_US, EUR: FLAG_EU, GBP: FLAG_GB, CNY: FLAG_CN, JPY: FLAG_JP, CAD: FLAG_CA });
 const I18N = {
   en: {
     locale: "en-US", timeTo: "Time to reach target goal", years: "years", months: "months",
@@ -289,6 +314,8 @@ const I18N = {
     ],
     taxHint: { none: "Showing gross returns, before income tax.", cdb: "Your CDB/RDB and SELIC pay IR on the gains: 22.5% up to 6 months, 20% up to 1 year, 17.5% up to 2 years, 15% after that. Each monthly deposit counts its own time.", lci: "Your CDI investment is tax-free. SELIC (Tesouro Selic) still pays IR on the gains: 22.5% down to 15% after 2 years." },
     splitTax: (c, g, x, m) => `You put in ${c}, growth adds ${g} after ${x} in tax`,
+    fxNames: { USD: "US dollar", EUR: "Euro", GBP: "British pound", CNY: "Chinese yuan (RMB)", JPY: "Japanese yen", CAD: "Canadian dollar" },
+    fxRate: (c, v) => `1 ${c} = R$ ${v}`, fxAdd: "Add another currency", fxRemove: "Remove this currency", stFx: d => `Exchange rates from ${d}`,
     incTitle: "Sustainable monthly withdrawal", perMonth: "/ month",
     incSub: v => `Living off the interest once you reach ${v}`,
     incMargin: "Margin above inflation", incMarginVal: r => r ? `+${r}% a year` : "Inflation only (keep value)",
@@ -335,6 +362,8 @@ const I18N = {
     ],
     taxHint: { none: "Mostrando rendimento bruto, antes do Imposto de Renda.", cdb: "Seu CDB/RDB e a SELIC pagam IR sobre o rendimento: 22,5% até 6 meses, 20% até 1 ano, 17,5% até 2 anos e 15% depois disso. Cada aporte mensal conta o próprio prazo.", lci: "Seu investimento CDI é isento. A SELIC (Tesouro Selic) continua pagando IR sobre o rendimento: de 22,5% até 15% após 2 anos." },
     splitTax: (c, g, x, m) => `Você investe ${c}, o rendimento soma ${g} já descontados ${x} de IR`,
+    fxNames: { USD: "Dólar americano", EUR: "Euro", GBP: "Libra esterlina", CNY: "Yuan chinês (RMB)", JPY: "Iene japonês", CAD: "Dólar canadense" },
+    fxRate: (c, v) => `1 ${c} = R$ ${v}`, fxAdd: "Adicionar outra moeda", fxRemove: "Remover esta moeda", stFx: d => `Câmbio de ${d}`,
     incTitle: "Retirada mensal sustentável", perMonth: "/ mês",
     incSub: v => `Vivendo de juros ao atingir ${v}`,
     incMargin: "Margem acima da inflação", incMarginVal: r => r ? `+${r}% a.a.` : "Só inflação (manter valor)",
@@ -374,13 +403,15 @@ const SHOW_DEF = { mine: true, selic: true, poup: false, pre: false, ipca: false
 state.show = Object.assign({}, SHOW_DEF, typeof state.show === "object" && state.show ? state.show : {});
 if (typeof state.preRate !== "number" || isNaN(state.preRate)) state.preRate = 13;
 if (typeof state.ipcaSpread !== "number" || isNaN(state.ipcaSpread)) state.ipcaSpread = 7;
+if (!Array.isArray(state.fx) || !state.fx.length || !state.fx.every(c => FX_SYM[c])) state.fx = ["USD"];
 if (typeof state.real !== "number" || isNaN(state.real) || state.real < 0 || state.real > 5) state.real = 1;
 
-const usd = n => "$" + Math.round(n).toLocaleString(t().locale);
+// All app amounts are in Brazilian reais
+const usd = n => "R$ " + Math.round(n).toLocaleString(t().locale);
 const dec = n => (+n).toLocaleString(t().locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const pct = n => (+n).toLocaleString(t().locale, { minimumFractionDigits: 1, maximumFractionDigits: 2 }) + "%";
 const fmt = (f, v) => f.money ? usd(v) : f.cdi ? t().ofCdi(Math.round(v)) : pct(v);
-const kfmt = n => n >= 1e7 ? "$" + dec(n / 1e6) + "M" : "$" + Math.round(n / 1000).toLocaleString(t().locale) + "k";
+const kfmt = n => n >= 1e6 ? "R$ " + (n / 1e6).toLocaleString(t().locale, { maximumFractionDigits: 2 }) + "M" : "R$ " + Math.round(n / 1000).toLocaleString(t().locale) + "k";
 
 // Build controls
 const box = document.getElementById("controls");
@@ -425,7 +456,7 @@ document.getElementById("reset").addEventListener("click", () => {
     const r = document.getElementById("r-" + f.id);
     r.max = f.max; r.value = f.def;
   });
-  state.tax = "none"; state.real = 1; state.show = Object.assign({}, SHOW_DEF); state.preRate = 13; state.ipcaSpread = 7;
+  state.fx = ["USD"]; state.tax = "none"; state.real = 1; state.show = Object.assign({}, SHOW_DEF); state.preRate = 13; state.ipcaSpread = 7;
   update();
 });
 
@@ -589,7 +620,7 @@ function renderCopom() {
   document.getElementById("copomStatus").textContent = copomError ? t().stError
     : copom.source === "builtin" ? t().stBuiltin(fdate(desc[0].date))
     : copom.noNew ? t().stNoNew(fdate(copom.updated)) : t().stUpdated(fdate(copom.updated));
-  if (!copomError) document.getElementById("copomStatus").textContent += ". " + t().stCdi(pct(cdiBase.rate), fdate(cdiBase.date)) + ". " + t().stIpca(pct(ipcaBase.rate), new Date(ipcaBase.date + "T12:00:00Z").toLocaleDateString(t().locale, { month: "short", year: "numeric", timeZone: "UTC" }));
+  if (!copomError) document.getElementById("copomStatus").textContent += ". " + t().stCdi(pct(cdiBase.rate), fdate(cdiBase.date)) + ". " + t().stFx(fdate(fxBase.date)) + ". " + t().stIpca(pct(ipcaBase.rate), new Date(ipcaBase.date + "T12:00:00Z").toLocaleDateString(t().locale, { month: "short", year: "numeric", timeZone: "UTC" }));
   if (!histOpen) return;
 
   // One chip per year of data available: 1 year, 2 years ... up to all of it
@@ -774,6 +805,19 @@ document.getElementById("copomUpdate").addEventListener("click", async () => {
     }
   } catch (e) {}
   try {
+    const codes = Object.keys(FX_SYM).join(",");
+    let j = null;
+    for (const base of ["https://api.frankfurter.dev/v1", "https://api.frankfurter.app"]) {
+      try { const r = await fetch(`${base}/latest?from=BRL&to=${codes}`, { cache: "no-store" }); if (r.ok) { j = await r.json(); break; } } catch (e) {}
+    }
+    if (j && j.rates && j.rates.USD) {
+      const brlPer = {}; Object.keys(j.rates).forEach(c => { brlPer[c] = 1 / j.rates[c]; });
+      fxBase = { date: j.date, brlPer };
+      try { localStorage.setItem("investcalc.fx", JSON.stringify(fxBase)); } catch (e) {}
+      gotSomething = true;
+    }
+  } catch (e) {}
+  try {
     const list = await fetchCopomHistory();
     const latest = l => [...l].sort((a, b) => b.date.localeCompare(a.date))[0].date;
     const noNew = latest(list) === latest(copom.list);
@@ -808,6 +852,7 @@ function renderIncome() {
   document.getElementById("incKeepLbl").textContent = t().incKeep(pct(ipcaBase.rate), state.real ? rTxt : 0);
   document.getElementById("incKeep").textContent = "− " + usd(keep);
   document.getElementById("incNote").textContent = t().incNote[state.tax] + " " + t().incKeepMsg(state.real ? rTxt : 0);
+  renderFx(can);
 }
 
 // The checklist above the chart: tick a line to show it, untick to hide it
@@ -858,6 +903,39 @@ document.getElementById("lines").addEventListener("focusout", e => {
   setTimeout(update, 0);
 });
 document.getElementById("lines").addEventListener("keydown", e => { if (e.key === "Enter" && e.target.classList.contains("rate-in")) e.target.blur(); });
+
+// Same withdrawal converted from R$ into other currencies. Tap a flag to pick the currency, + to add a row.
+function renderFx(brl) {
+  const box = document.getElementById("fx");
+  if (document.activeElement && document.activeElement.closest && document.activeElement.closest("#fx select")) return;
+  if (!(brl > 0)) { box.innerHTML = ""; return; }
+  const flags = FX_FLAG(), codes = Object.keys(FX_SYM);
+  box.innerHTML = state.fx.map((cur, k) => {
+    const per = fxBase.brlPer[cur];
+    const v = brl / per;
+    const num = v.toLocaleString(t().locale, { maximumFractionDigits: 0 });
+    const rateTxt = per.toLocaleString(t().locale, { minimumFractionDigits: per < 0.1 ? 4 : 2, maximumFractionDigits: per < 0.1 ? 4 : 2 });
+    const last = k === state.fx.length - 1;
+    return `<div class="fx-row">
+      <div class="fx-main"><div class="fx-amt">${FX_SYM[cur]} ${num}<small>${t().perMonth}</small></div><div class="fx-rate">${t().fxRate(cur, rateTxt)}</div></div>
+      <label class="fx-flag" title="${t().fxNames[cur]}">${flags[cur]}<span class="code">${cur} ▾</span>
+        <select data-k="${k}" aria-label="${t().fxNames[cur]}">${codes.map(c => `<option value="${c}"${c === cur ? " selected" : ""}>${c} · ${t().fxNames[c]}</option>`).join("")}</select>
+      </label>
+      ${state.fx.length > 1 ? `<button class="fx-btn rm" type="button" data-rm="${k}" aria-label="${t().fxRemove}">−</button>` : ""}
+      ${last && state.fx.length < codes.length ? `<button class="fx-btn" type="button" data-add="1" aria-label="${t().fxAdd}">+</button>` : ""}
+    </div>`;
+  }).join("");
+}
+document.getElementById("fx").addEventListener("change", e => {
+  const sel = e.target.closest("select"); if (!sel) return;
+  state.fx[+sel.dataset.k] = sel.value; sel.blur(); update();
+});
+document.getElementById("fx").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.dataset.add) { const next = Object.keys(FX_SYM).find(c => !state.fx.includes(c)) || "USD"; state.fx.push(next); }
+  if (b.dataset.rm !== undefined) state.fx.splice(+b.dataset.rm, 1);
+  update();
+});
 
 function update() {
   FIELDS.forEach(f => {
